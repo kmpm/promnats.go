@@ -3,6 +3,7 @@ package promnatsplugin
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -19,8 +20,15 @@ func init() {
 func (PromNats) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.handlers.promnats",
-		New: func() caddy.Module { return new(PromNats) },
+		New: func() caddy.Module { return newModule() },
 	}
+}
+
+func newModule() *PromNats {
+	pn := &PromNats{
+		Interval: time.Minute * 5,
+	}
+	return pn
 }
 
 func (m *PromNats) Provision(ctx caddy.Context) error {
@@ -35,7 +43,9 @@ func (m *PromNats) Provision(ctx caddy.Context) error {
 	if err != nil {
 		return err
 	}
+
 	m.nc = nc
+	m.refresh()
 	return nil
 }
 
