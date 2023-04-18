@@ -44,6 +44,26 @@ func testSafe(s string) error {
 	return nil
 }
 
+func HostPart() string {
+	s, _ := os.Hostname()
+	s = strings.ReplaceAll(s, ".", "_")
+	return strings.ToLower(s)
+}
+
+func ExecPart() string {
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	ex = filepath.Base(ex)
+	ex = strings.TrimSuffix(ex, filepath.Ext(ex))
+	return ex
+}
+
+func PidPart() string {
+	return strconv.Itoa(os.Getpid())
+}
+
 func WithSubj(parts ...string) Option {
 	return func(o *options) error {
 		if len(parts) > 0 {
@@ -66,23 +86,12 @@ func WithDebug() Option {
 	}
 }
 
-func execName() string {
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	ex = filepath.Base(ex)
-	ex = strings.TrimSuffix(ex, filepath.Ext(ex))
-	return ex
-}
-
 func defaultSubjects() []string {
-	hostname, _ := os.Hostname()
 	return []string{
 		"",
-		execName(),
-		hostname,
-		strconv.Itoa(os.Getpid()),
+		ExecPart(),
+		HostPart(),
+		PidPart(),
 	}
 }
 
