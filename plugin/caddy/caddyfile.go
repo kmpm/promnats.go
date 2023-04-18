@@ -1,4 +1,4 @@
-package promnatsplugin
+package promnatscaddy
 
 import (
 	"log"
