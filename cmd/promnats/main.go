@@ -121,14 +121,15 @@ func main() {
 		log.Fatalf("error in cleanup: %v", err)
 	}
 
-	meta := map[string][]string{}
-
+	// create meta json data
+	meta := map[string][]fileinfo{}
 	for _, x := range active {
-		parts := strings.Split(x, string(os.PathSeparator))
+		parts := strings.Split(x.Path, string(os.PathSeparator))
+		x.Path = parts[2]
 		if v, ok := meta[parts[1]]; ok {
-			meta[parts[1]] = append(v, parts[1])
+			meta[parts[1]] = append(v, x)
 		} else {
-			meta[parts[1]] = []string{parts[1]}
+			meta[parts[1]] = []fileinfo{x}
 		}
 	}
 	data, err := json.MarshalIndent(meta, "", "  ")
@@ -139,10 +140,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not write metrics.json: %v", err)
 	}
-
 }
 
-func cleanup(p string, dur time.Duration) (active []string, err error) {
+type fileinfo struct {
+	Path     string    `json:"path"`
+	Modified time.Time `json:"modified"`
+}
+
+func cleanup(p string, dur time.Duration) (active []fileinfo, err error) {
 	// Walk the directory tree
 	err = filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -168,7 +173,7 @@ func cleanup(p string, dur time.Duration) (active []string, err error) {
 				if opts.Debug {
 					log.Println("Skipping:", path)
 				}
-				active = append(active, path)
+				active = append(active, fileinfo{path, modTime})
 				return nil
 			}
 
