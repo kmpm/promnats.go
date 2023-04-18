@@ -66,6 +66,9 @@ func PidPart() string {
 
 func WithSubj(parts ...string) Option {
 	return func(o *options) error {
+		if l := len(parts); l < 1 {
+			return errors.New("must be at least 1 part")
+		}
 		if len(parts) > 0 {
 			o.Subjects = []string{""}
 		}
@@ -73,7 +76,7 @@ func WithSubj(parts ...string) Option {
 			if err := testSafe(s); err != nil {
 				return err
 			}
-			o.Subjects = append(o.Subjects, strings.Join(parts[:i], "."))
+			o.Subjects = append(o.Subjects, strings.ToLower(strings.Join(parts[:i+1], ".")))
 		}
 		return nil
 	}
@@ -90,9 +93,13 @@ func defaultSubjects() []string {
 	return []string{
 		"",
 		ExecPart(),
-		HostPart(),
-		PidPart(),
+		ExecPart() + "." + HostPart(),
+		ExecPart() + "." + HostPart() + "." + PidPart(),
 	}
+}
+
+func genId(s []string) string {
+	return strings.ToLower(s[len(s)-1])
 }
 
 func RequestHandler(nc *nats.Conn, opts ...Option) error {
@@ -112,7 +119,7 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 		cfg.Subjects = defaultSubjects()
 	}
 
-	cfg.Header.Add(HeaderPnID, strings.Join(cfg.Subjects[1:], "."))
+	cfg.Header.Add(HeaderPnID, genId(cfg.Subjects))
 
 	reg := prometheus.ToTransactionalGatherer(prometheus.DefaultGatherer)
 
@@ -136,7 +143,7 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 	}
 	for _, subj := range cfg.Subjects {
 		if subj != "" {
-			subj = fmt.Sprintf("%s.%s", cfg.RootSubject, subj)
+			subj = fmt.Sprintf("%s.%s", cfg.RootSubject, strings.ToLower(subj))
 		} else {
 			subj = cfg.RootSubject
 		}
