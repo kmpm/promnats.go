@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -17,8 +18,8 @@ import (
 )
 
 const (
-	hdrAccept = "Accept"
-	hdrPnID   = "Promnats-ID"
+	hdrAccept  = "Accept"
+	HeaderPnID = "Promnats-ID"
 )
 
 type options struct {
@@ -43,6 +44,26 @@ func testSafe(s string) error {
 	return nil
 }
 
+func HostPart() string {
+	s, _ := os.Hostname()
+	s = strings.ReplaceAll(s, ".", "_")
+	return strings.ToLower(s)
+}
+
+func ExecPart() string {
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	ex = filepath.Base(ex)
+	ex = strings.TrimSuffix(ex, filepath.Ext(ex))
+	return ex
+}
+
+func PidPart() string {
+	return strconv.Itoa(os.Getpid())
+}
+
 func WithSubj(parts ...string) Option {
 	return func(o *options) error {
 		if len(parts) > 0 {
@@ -65,23 +86,12 @@ func WithDebug() Option {
 	}
 }
 
-func execName() string {
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	ex = filepath.Base(ex)
-	ex = strings.TrimSuffix(ex, filepath.Ext(ex))
-	return ex
-}
-
 func defaultSubjects() []string {
-	hostname, _ := os.Hostname()
 	return []string{
 		"",
-		execName(),
-		hostname,
-		strconv.Itoa(os.Getpid()),
+		ExecPart(),
+		HostPart(),
+		PidPart(),
 	}
 }
 
@@ -102,7 +112,7 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 		cfg.Subjects = defaultSubjects()
 	}
 
-	cfg.Header.Add(hdrPnID, strings.Join(cfg.Subjects[1:], "."))
+	cfg.Header.Add(HeaderPnID, strings.Join(cfg.Subjects[1:], "."))
 
 	reg := prometheus.ToTransactionalGatherer(prometheus.DefaultGatherer)
 
@@ -145,6 +155,12 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 }
 
 func handleMsg(msg *nats.Msg, cfg *options, reg prometheus.TransactionalGatherer) error {
+	start := time.Now()
+	if cfg.Debug {
+		defer func() {
+			log.Printf("promnats response time: %s", time.Since(start))
+		}()
+	}
 	mfs, done, err := reg.Gather()
 	if err != nil {
 		return err
@@ -171,8 +187,15 @@ func handleMsg(msg *nats.Msg, cfg *options, reg prometheus.TransactionalGatherer
 	resp := nats.NewMsg(msg.Subject)
 	resp.Header = cfg.Header
 	resp.Header.Add("Content-Type", string(contentType))
+	// if cfg.Debug {
+	// 	log.Printf("response: %v", resp)
+	// }
 	resp.Data = buf.Bytes()
-	msg.RespondMsg(resp)
+
+	err = msg.RespondMsg(resp)
+	if err != nil {
+		//log error
+	}
 
 	return nil
 }
