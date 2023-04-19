@@ -16,6 +16,10 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
+const (
+	min_parts = 1
+)
+
 type pathinfo struct {
 	Path     string               `json:"path,omitempty"`
 	IsFile   bool                 `json:"is_file"`
@@ -24,7 +28,17 @@ type pathinfo struct {
 	Children map[string]*pathinfo `json:"children,omitempty"`
 }
 
-func work(nc *nats.Conn) {
+func mustAbs(p string) string {
+	abs, err := filepath.Abs(opts.Dest)
+	if err != nil {
+		panic(err)
+	}
+	return abs
+}
+
+func work(nc *nats.Conn) error {
+	destAbs := mustAbs(opts.Dest)
+	absParts := strings.Split(destAbs, string(os.PathSeparator))
 
 	msgs, err := doReq(context.TODO(), nil, flag.Arg(0), 0, nc)
 	if err != nil {
@@ -40,11 +54,17 @@ func work(nc *nats.Conn) {
 			continue
 		}
 		parts := strings.Split(id, ".")
-		if len(parts) < 3 {
-			log.Printf("id must have at least 3 parts: %s", id)
+		if len(parts) < min_parts {
+			log.Printf("id must have at least %d part(s): %s", min_parts, id)
 			continue
 		}
 
+		// if last of absulute destination is same as first of p drop it
+		for absParts[len(absParts)-1] == parts[0] || len(parts) != 0 {
+			parts = parts[1:]
+		}
+
+		// build a path out of the id parts
 		p := path.Join(parts[:len(parts)-1]...)
 		p = path.Join(opts.Dest, p)
 
@@ -89,6 +109,7 @@ func work(nc *nats.Conn) {
 	if err != nil {
 		log.Fatalf("error writing output: %v", err)
 	}
+	return nil
 }
 
 func cleanup(p string, dur time.Duration, active *pathinfo) error {
