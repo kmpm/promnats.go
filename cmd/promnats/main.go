@@ -65,7 +65,9 @@ func main() {
 		}
 	} else {
 		nc, err = nats.Connect(serverFlag)
-		log.Fatalf("could not connect to server: %v", err)
+		if err != nil {
+			log.Fatalf("could not connect to server: %v", err)
+		}
 	}
 	work(nc)
 }
