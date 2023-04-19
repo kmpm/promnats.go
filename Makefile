@@ -19,19 +19,5 @@ test:
 
 .PHONY: collect
 collect:
-	go run ./cmd/promnats --context hermod-rfid metrics
+	go run ./cmd/promnats --max-age 5m --context hermod-rfid metrics 
 	
-
-.PHONY: caddywatch
-caddyserver: $(CADDYBIN)
-	$(CADDYBIN) run --watch --config testdata/Caddyfile
-
-
-.PHONY: cleancaddy
-cleancaddy: 
-	del $(CADDYBIN)
-	
-
-$(CADDYBIN):
-	xcaddy build --with github.com/kmpm/promnats.go/plugin/caddy
-
