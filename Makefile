@@ -1,7 +1,7 @@
 
 GOOS=$(shell go env GOOS)
-
-
+GOARCH=$(shell go env GOARCH)
+RUNARGS?=--max-age 5m --context hermod-rfid metrics 
 
 ifeq ($(GOOS),windows) 
 	BINEXT = .exe
@@ -9,15 +9,43 @@ else
 	BINEXT =
 endif
 
+# try to be os agnostic
+ifeq ($(OS),Windows_NT)
+	FixPath = $(subst /,\,$1)
+	RM = del
+	MKDIR = mkdir
+	CP = copy
+else
+	FixPath = $1
+	MKDIR = mkdir -p
+	RM = rm
+	BINEXT = 
+	CP = cp
+endif
 
-CADDYBIN=caddy$(BINEXT)
 
+
+VERSION?=$(shell git describe --tags --always --long --dirty)
+OUT_DIR=./out
+OUT_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)$(BINEXT))
+OUTVERBOSE_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)-$(VERSION)$(BINEXT))
+
+GOFLAGS=-ldflags "-X 'main.appVersion=$(VERSION)'"
+
+.PHONY: build
+build: $(OUT_DIR)
+	go build $(GOFLAGS) -o $(OUTVERBOSE_FILE) $(call FixPath,./cmd/promnats)
+	$(CP) $(OUTVERBOSE_FILE) $(OUT_FILE)
+
+$(OUT_DIR):
+	$(MKDIR) $(call FixPath,$(OUT_DIR))
 
 
 test:
 	go test ./...
 
-.PHONY: collect
-collect:
-	go run ./cmd/promnats --max-age 5m --context hermod-rfid metrics 
+
+.PHONY: run
+run:
+	go run $(GOFLAGS) ./cmd/promnats $(RUNARGS)
 	

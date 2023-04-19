@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -105,6 +106,10 @@ func cleanup(p string, dur time.Duration, active *pathinfo) error {
 
 		// Skip directories
 		if info.IsDir() {
+			err = removeEmptyPath(path)
+			if err != nil {
+				log.Printf("could not remove dir %s: %v", path, err)
+			}
 			return nil
 		}
 
@@ -149,8 +154,41 @@ func cleanup(p string, dur time.Duration, active *pathinfo) error {
 				return err
 			}
 			log.Println("Deleted:", path)
+			//delete folder if empty
+			err = removeEmptyPath(filepath.Dir(path))
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})
 	return err
+}
+
+func removeEmptyPath(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	if !info.IsDir() {
+		return errors.New("provided path is not a directory")
+	}
+
+	files, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+
+	if len(files) == 0 {
+		err := os.Remove(path)
+		if err != nil {
+			return err
+		}
+		log.Println("Deleted:", path)
+	} else {
+		return nil
+	}
+
+	return nil
 }

@@ -19,7 +19,8 @@ type Opts struct {
 }
 
 var (
-	opts Opts = Opts{
+	appVersion      = "v0.0.0-development"
+	opts       Opts = Opts{
 		Timeout: 10 * time.Second,
 	}
 )
@@ -35,13 +36,19 @@ func main() {
 	flag.BoolVar(&opts.WithHTML, "html", false, "output html")
 	flag.StringVar(&opts.Dest, "dest", "./metrics", "folder to write output to")
 	flag.DurationVar(&opts.MaxAge, "max-age", time.Hour, "how old info should we keep")
+	flag.DurationVar(&opts.Timeout, "timeout", time.Second*10, "how long to wait for data")
 
 	flag.Parse()
 
 	if opts.Debug {
-		log.Printf("  opt.Timeout: %v\n", opts.Timeout)
-		log.Printf("  Context: %s", contextFlag)
+		log.Printf("  Version: %v", appVersion)
 		log.Printf("  Args: %v", flag.Args())
+		log.Println("  Options:")
+		log.Printf("\topts.Timeout: %v\n", opts.Timeout)
+		log.Printf("\topts.MaxAge: %v\n", opts.MaxAge)
+		log.Printf("\topts.Dest: %v\n", opts.Dest)
+		log.Printf("\topts.Trace: %v\n", opts.Trace)
+		log.Printf("\topts.WithHTML: %v\n", opts.WithHTML)
 	}
 
 	if flag.NArg() != 1 {
