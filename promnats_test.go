@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestWithSubj(t *testing.T) {
+func Test_WithParts(t *testing.T) {
 	type args struct {
 		parts []string
 	}
@@ -20,7 +20,7 @@ func TestWithSubj(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fn := WithSubj(tt.args.parts...)
+			fn := WithParts(tt.args.parts...)
 			got := &options{}
 			err := fn(got)
 			if (err != nil) != tt.wantErr {

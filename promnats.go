@@ -28,6 +28,7 @@ type options struct {
 	Subjects    []string
 	Subs        []*nats.Subscription
 	Debug       bool
+	ID          string
 }
 
 type Option func(*options) error
@@ -37,9 +38,11 @@ func testSafe(s string) error {
 	if strings.ContainsAny(s, ".\r\n\t ") {
 		msgs = append(msgs, "contains invalid chars")
 	}
-
+	if len(s) < 1 {
+		msgs = append(msgs, "zero length")
+	}
 	if len(msgs) > 0 {
-		return errors.New("invalid subject part: " + strings.Join(msgs, ","))
+		return fmt.Errorf("invalid subject part '%s': %s", s, strings.Join(msgs, ","))
 	}
 	return nil
 }
@@ -64,7 +67,8 @@ func PidPart() string {
 	return strconv.Itoa(os.Getpid())
 }
 
-func WithSubj(parts ...string) Option {
+// WithParts will generate one subscription for each part
+func WithParts(parts ...string) Option {
 	return func(o *options) error {
 		if l := len(parts); l < 1 {
 			return errors.New("must be at least 1 part")
@@ -80,6 +84,11 @@ func WithSubj(parts ...string) Option {
 		}
 		return nil
 	}
+}
+
+// WithID will split input at . and create a subscription for each part
+func WithID(id string) Option {
+	return WithParts(strings.Split(id, ".")...)
 }
 
 func WithDebug() Option {
@@ -118,8 +127,8 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 	if len(cfg.Subjects) == 0 {
 		cfg.Subjects = defaultSubjects()
 	}
-
-	cfg.Header.Add(HeaderPnID, genId(cfg.Subjects))
+	cfg.ID = genId(cfg.Subjects)
+	cfg.Header.Add(HeaderPnID, cfg.ID)
 
 	reg := prometheus.ToTransactionalGatherer(prometheus.DefaultGatherer)
 
