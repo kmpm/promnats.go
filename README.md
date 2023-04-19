@@ -6,6 +6,8 @@ instrumentation with, in this case, prometheus.
 This is a library that lets you use NATS requests instead of http requests
 to return the prometheus data.
 
+__Important:__ Any change below < 1.0.0 is to be considered a breaking change 
+since stuff id developing.
 
 ## Usage
 ```golang
