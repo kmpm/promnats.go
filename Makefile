@@ -1,7 +1,7 @@
 
 GOOS=$(shell go env GOOS)
 GOARCH=$(shell go env GOARCH)
-RUNARGS?=--max-age 5m --context hermod-rfid metrics 
+RUNARGS?=-verbosity debug -mapping .\mappings-secret.txt -context hermod-rfid
 
 ifeq ($(GOOS),windows) 
 	BINEXT = .exe
