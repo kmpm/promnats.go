@@ -202,7 +202,8 @@ func handleMsg(msg *nats.Msg, cfg *options, reg prometheus.TransactionalGatherer
 
 	resp := nats.NewMsg(msg.Subject)
 	resp.Header = cfg.Header
-	resp.Header.Add("Content-Type", string(contentType))
+
+	resp.Header.Set("Content-Type", string(contentType))
 	// if cfg.Debug {
 	// 	log.Printf("response: %v", resp)
 	// }
@@ -211,6 +212,7 @@ func handleMsg(msg *nats.Msg, cfg *options, reg prometheus.TransactionalGatherer
 	err = msg.RespondMsg(resp)
 	if err != nil {
 		//log error
+		log.Printf("error sending reply: %v", err)
 	}
 
 	return nil
