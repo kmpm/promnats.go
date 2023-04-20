@@ -21,6 +21,7 @@ import (
 type Opts struct {
 	Context     string
 	Server      string
+	Nkey        string
 	Timeout     time.Duration
 	Verbosity   string
 	Portmap     map[int]string
@@ -30,18 +31,24 @@ type Opts struct {
 var opts Opts
 
 func init() {
+	// initialize opts
 	opts = Opts{
 		Portmap: make(map[int]string),
 	}
+	// add some flags for connection
 	flag.StringVar(&opts.Context, "context", "", "context")
 	flag.StringVar(&opts.Server, "server", "", "server like "+nats.DefaultURL)
-	flag.StringVar(&opts.MappingFile, "mapping", "", "path to file with <port>:<subject> mappings instead of args")
-	flag.DurationVar(&opts.Timeout, "timeout", time.Second*2, "time waiting for replies")
+	flag.StringVar(&opts.Nkey, "nkey", "", "pathto nkey file")
+
+	// flags for other config
 	flag.StringVar(&opts.Verbosity, "verbosity", "info", "debug|info|warn|error")
+	flag.DurationVar(&opts.Timeout, "timeout", time.Second*2, "time waiting for replies")
+	flag.StringVar(&opts.MappingFile, "mapping", "", "path to file with <port>:<subject> mappings instead of args")
 }
 
 func main() {
 	flag.Parse()
+	// setup logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	switch opts.Verbosity {
 	case "debug":
@@ -59,6 +66,7 @@ func main() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 
 	var err error
+	// load mappings from file
 	if opts.MappingFile != "" {
 		err = fileMappings(opts.MappingFile)
 		if err != nil {
@@ -66,17 +74,20 @@ func main() {
 		}
 	}
 
+	// get other mappings from args
 	err = argMappings()
 	if err != nil {
 		log.Fatal().Err(err).Msg("error parsing arguments")
 	}
 
+	// open connection by context or server
+	if opts.Server != "" && opts.Context != "" {
+		log.Fatal().Msg("you must not use both context and server")
+	}
 	var nc *nats.Conn
-
 	if opts.Server == "" {
 		nc, err = natscontext.Connect(opts.Context)
 		if err != nil {
-			// log.Fatalf("could not connect to context: %v", err)
 			log.Fatal().Err(err).Msg("error connecting using nats context")
 		}
 	} else {
@@ -86,15 +97,19 @@ func main() {
 		}
 	}
 
+	// do aktual work
 	err = work(nc)
 	if err != nil {
 		log.Fatal().Err(err).Msg("error doing work")
 	}
+
+	// wait for things to close
 	fmt.Println("waiting")
 	runtime.Goexit()
 }
 
-func addPortman(s string) error {
+// addPortman parses a string and adds to opts.Portmap if valid.
+func addPortmap(s string) error {
 	parts := strings.Split(s, ":")
 	if len(parts) < 2 {
 		return fmt.Errorf("each mapping must contain 2 parts: %v", parts)
@@ -109,32 +124,40 @@ func addPortman(s string) error {
 	return nil
 }
 
+// fileMappings reads filename, line by line and adds them to portmap if valid
 func fileMappings(filename string) error {
+	// check filename if path exists
 	info, err := os.Stat(filename)
 	if err != nil {
 		return err
 	}
+	// cant be a dir
 	if info.IsDir() {
 		return errors.New("path is a directory")
 	}
-
+	// open the file
 	fil, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
 	defer fil.Close()
 
+	// read line by line
 	s := bufio.NewScanner(fil)
 	s.Split(bufio.ScanLines)
 	for s.Scan() {
+		// trim any bad characters
 		line := strings.Trim(s.Text(), " \t\r\n")
+		// skip # comment lines
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
+		// skip empty lines
 		if line == "" {
 			continue
 		}
-		err = addPortman(line)
+		// parse and possibly add
+		err = addPortmap(line)
 		if err != nil {
 			return err
 		}
@@ -142,13 +165,15 @@ func fileMappings(filename string) error {
 	return nil
 }
 
+// argMappings adds arguments to anything that is allready in portmap
+// if portmap is empty there must be att least 1 argument with portmap config
 func argMappings() error {
 	if len(opts.Portmap) == 0 && flag.NArg() < 1 {
 		return fmt.Errorf("You must provide at least one <port>:<subject> argument")
 	}
 
 	for _, pm := range flag.Args() {
-		err := addPortman(pm)
+		err := addPortmap(pm)
 		if err != nil {
 			return err
 		}

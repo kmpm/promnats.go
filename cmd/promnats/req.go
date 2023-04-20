@@ -104,6 +104,8 @@ func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats
 	return nil
 }
 
+// doReq sends request to subject and return any replies
+// stops at opts.Timeout or waitFor number of replies if > 0
 func doReq(ctx context.Context, req any, subj string, waitFor int, nc *nats.Conn) ([]*nats.Msg, error) {
 	res := []*nats.Msg{}
 	mu := sync.Mutex{}
@@ -113,6 +115,5 @@ func doReq(ctx context.Context, req any, subj string, waitFor int, nc *nats.Conn
 		res = append(res, m)
 		mu.Unlock()
 	})
-
 	return res, err
 }
