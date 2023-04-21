@@ -10,6 +10,7 @@ __Important:__ Any change below < 1.0.0 is to be considered a breaking change
 since stuff id developing.
 
 ## Usage
+### how to use the module in other apps
 ```golang
 func main() {
     nc, _ := nats.Connect(nats.DefaultURL)
@@ -47,4 +48,13 @@ go_memstats_alloc_bytes 416072
 # TYPE go_memstats_alloc_bytes_total counter
 go_memstats_alloc_bytes_total 416072
 ...
+```
+
+### How to interface data for prometheus
+
+cmd/promnats contains a program that lets you 
+run a simple webserver that maps ports and subjects.
+
+```shell
+go run ./cmd/promnats -verbosity debug -server nats://localhost:4222 9001:metrics.nats-demo-service.kmpm-ms-032d66.2264
 ```
