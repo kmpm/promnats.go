@@ -60,7 +60,7 @@ func ExecPart() string {
 	}
 	ex = filepath.Base(ex)
 	ex = strings.TrimSuffix(ex, filepath.Ext(ex))
-	return ex
+	return strings.ToLower(strings.ReplaceAll(ex, ".", "_"))
 }
 
 func PidPart() string {
@@ -96,6 +96,9 @@ func WithDebug() Option {
 		o.Debug = true
 		return nil
 	}
+}
+func DefaultSubject() string {
+	return ExecPart() + "." + HostPart() + "." + PidPart()
 }
 
 func defaultSubjects() []string {
