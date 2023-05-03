@@ -9,28 +9,50 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+func stopServers() error {
+	opts.Closing = true
+	defer func() {
+		opts.serversWg.Wait()
+		opts.Closing = false
+	}()
+
+	for _, s := range opts.Servers {
+		err := s.Close()
+		if err != nil {
+			return err
+		}
+	}
+	opts.Servers = nil
+	return nil
+}
+
 // work sets up the http handlers for each entry in portmap
 func work(nc *nats.Conn) error {
+	stopServers()
+
 	// loop every entry in opts.Portmap
 	for port, subj := range opts.Portmap {
 		// create a multiplexer with metrics handler
 		mux := http.NewServeMux()
 		mux.HandleFunc("/metrics", makeHandler(subj, nc))
-
 		// create a http.Server with given port
 		server := &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
 		}
-
+		opts.Servers = append(opts.Servers, server)
 		// run server in go func
+		opts.serversWg.Add(1)
 		go func(subj string) {
+			defer opts.serversWg.Done()
 			log.Info().Str("addr", server.Addr).Str("subj", subj).Msg("listening")
 			err := server.ListenAndServe()
 			if err != nil {
 				// TODO: Should we try to restart or crash application?
-				log.Error().Err(err).Any("server", server).Msg("server died")
-				panic(err)
+				log.Error().Err(err).Str("server", server.Addr).Str("subj", subj).Msg("server died")
+				if !opts.Closing {
+					panic(err)
+				}
 			}
 		}(subj)
 	}

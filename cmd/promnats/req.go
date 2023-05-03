@@ -23,7 +23,6 @@ func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats
 			return err
 		}
 	}
-
 	log.Debug().Str("subj", subj).Msg("inbound")
 
 	var (

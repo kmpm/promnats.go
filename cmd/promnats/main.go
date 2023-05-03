@@ -5,6 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
+	"sync"
 
 	"os"
 	"runtime"
@@ -19,22 +21,31 @@ import (
 )
 
 type Opts struct {
-	Context     string
-	Server      string
-	Nkey        string
-	Timeout     time.Duration
-	Verbosity   string
-	Portmap     map[int]string
-	MappingFile string
+	Context       string
+	Server        string
+	Nkey          string
+	Timeout       time.Duration
+	Verbosity     string
+	Portmap       map[int]string
+	MappingFile   string
+	PrettyLog     bool
+	Servers       []*http.Server
+	Closing       bool
+	serversWg     sync.WaitGroup
+	DiscoveryHost string
 }
 
 var opts Opts
+var mu sync.Mutex
 
 func init() {
 	// initialize opts
 	opts = Opts{
 		Portmap: make(map[int]string),
+		Servers: make([]*http.Server, 0),
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	// add some flags for connection
 	flag.StringVar(&opts.Context, "context", "", "context")
 	flag.StringVar(&opts.Server, "server", "", "server like "+nats.DefaultURL)
@@ -44,6 +55,9 @@ func init() {
 	flag.StringVar(&opts.Verbosity, "verbosity", "info", "debug|info|warn|error")
 	flag.DurationVar(&opts.Timeout, "timeout", time.Second*2, "time waiting for replies")
 	flag.StringVar(&opts.MappingFile, "mapping", "", "path to file with <port>:<subject> mappings instead of args")
+	flag.BoolVar(&opts.PrettyLog, "pretty", false, "pretty logging")
+
+	flag.StringVar(&opts.DiscoveryHost, "discovery", "", "ip / hostname to show in http_sd")
 }
 
 func main() {
@@ -63,22 +77,28 @@ func main() {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	}
 
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	if opts.PrettyLog {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	}
 
 	var err error
 	// load mappings from file
 	if opts.MappingFile != "" {
+		mu.Lock()
 		err = fileMappings(opts.MappingFile)
 		if err != nil {
 			log.Fatal().Err(err).Str("mapping", opts.MappingFile).Msg("error reading mappings")
 		}
+		mu.Unlock()
 	}
 
 	// get other mappings from args
+	mu.Lock()
 	err = argMappings()
 	if err != nil {
 		log.Fatal().Err(err).Msg("error parsing arguments")
 	}
+	mu.Unlock()
 
 	// open connection by context or server
 	if opts.Server != "" && opts.Context != "" {
@@ -97,10 +117,17 @@ func main() {
 		}
 	}
 
-	// do aktual work
-	err = work(nc)
+	err = discover(nc, ":8083", opts.DiscoveryHost)
 	if err != nil {
-		log.Fatal().Err(err).Msg("error doing work")
+		log.Fatal().Err(err).Msg("error discovering")
+	}
+
+	if len(opts.Portmap) > 0 {
+		// do aktual work
+		err = work(nc)
+		if err != nil {
+			log.Fatal().Err(err).Msg("error doing work")
+		}
 	}
 
 	// wait for things to close
@@ -126,6 +153,7 @@ func addPortmap(s string) error {
 
 // fileMappings reads filename, line by line and adds them to portmap if valid
 func fileMappings(filename string) error {
+
 	// check filename if path exists
 	info, err := os.Stat(filename)
 	if err != nil {
@@ -168,9 +196,9 @@ func fileMappings(filename string) error {
 // argMappings adds arguments to anything that is allready in portmap
 // if portmap is empty there must be att least 1 argument with portmap config
 func argMappings() error {
-	if len(opts.Portmap) == 0 && flag.NArg() < 1 {
-		return fmt.Errorf("You must provide at least one <port>:<subject> argument")
-	}
+	// if len(opts.Portmap) == 0 && flag.NArg() < 1 {
+	// 	return fmt.Errorf("You must provide at least one <port>:<subject> argument")
+	// }
 
 	for _, pm := range flag.Args() {
 		err := addPortmap(pm)
