@@ -33,10 +33,12 @@ type Opts struct {
 	Closing       bool
 	serversWg     sync.WaitGroup
 	DiscoveryHost string
+	Version       bool
 }
 
 var opts Opts
 var mu sync.Mutex
+var appVersion = "0.0.0-dev"
 
 func init() {
 	// initialize opts
@@ -58,10 +60,15 @@ func init() {
 	flag.BoolVar(&opts.PrettyLog, "pretty", false, "pretty logging")
 
 	flag.StringVar(&opts.DiscoveryHost, "discovery", "", "ip / hostname to show in http_sd")
+	flag.BoolVar(&opts.Version, "version", false, "show version and eit")
 }
 
 func main() {
 	flag.Parse()
+	if opts.Version {
+		fmt.Println(appVersion)
+		os.Exit(0)
+	}
 	// setup logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	switch opts.Verbosity {
