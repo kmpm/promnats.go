@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -34,6 +32,7 @@ type Opts struct {
 	serversWg     sync.WaitGroup
 	DiscoveryHost string
 	Version       bool
+	Host          string
 }
 
 var opts Opts
@@ -56,7 +55,7 @@ func init() {
 	// flags for other config
 	flag.StringVar(&opts.Verbosity, "verbosity", "info", "debug|info|warn|error")
 	flag.DurationVar(&opts.Timeout, "timeout", time.Second*2, "time waiting for replies")
-	flag.StringVar(&opts.MappingFile, "mapping", "", "path to file with <port>:<subject> mappings instead of args")
+	flag.StringVar(&opts.MappingFile, "mapping", "./mapping.txt", "path to file with <port>:<subject> mappings instead of args")
 	flag.BoolVar(&opts.PrettyLog, "pretty", false, "pretty logging")
 
 	flag.StringVar(&opts.DiscoveryHost, "discovery", "", "ip / hostname to show in http_sd")
@@ -86,6 +85,19 @@ func main() {
 
 	if opts.PrettyLog {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	}
+
+	log.Info().Str("version", appVersion).Msg("")
+
+	if opts.Host == "" {
+		ips := GetLocalIP()
+		if len(ips) > 1 && opts.Host == "" {
+			log.Fatal().
+				Err(fmt.Errorf("more than 1 local ip found. please provide --host")).
+				Strs("ips", ips).
+				Msg("error getting host")
+		}
+		opts.Host = ips[0]
 	}
 
 	var err error
@@ -155,48 +167,6 @@ func addPortmap(s string) error {
 	}
 
 	opts.Portmap[port] = parts[1]
-	return nil
-}
-
-// fileMappings reads filename, line by line and adds them to portmap if valid
-func fileMappings(filename string) error {
-
-	// check filename if path exists
-	info, err := os.Stat(filename)
-	if err != nil {
-		return err
-	}
-	// cant be a dir
-	if info.IsDir() {
-		return errors.New("path is a directory")
-	}
-	// open the file
-	fil, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer fil.Close()
-
-	// read line by line
-	s := bufio.NewScanner(fil)
-	s.Split(bufio.ScanLines)
-	for s.Scan() {
-		// trim any bad characters
-		line := strings.Trim(s.Text(), " \t\r\n")
-		// skip # comment lines
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		// skip empty lines
-		if line == "" {
-			continue
-		}
-		// parse and possibly add
-		err = addPortmap(line)
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

@@ -30,16 +30,16 @@ func discover(nc *nats.Conn, addr, host string) error {
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: WrapHandler(mux),
 	}
 
 	// run server in go func
 	go func() {
-		log.Info().Str("addr", server.Addr).Msg("listening")
+		log.Info().Str("addr", server.Addr).Msg("discovery server started")
 		err := server.ListenAndServe()
 		if err != nil {
 			// TODO: Should we try to restart or crash application?
-			log.Error().Err(err).Any("server", server).Msg("server died")
+			log.Error().Err(err).Any("server", server).Msg("discovery server died")
 			panic(err)
 		}
 	}()

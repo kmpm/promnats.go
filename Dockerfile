@@ -33,11 +33,12 @@ ARG USER=default
 # install sudo as root
 RUN apk add ca-certificates su-exec tzdata
 
-RUN adduser -D $USER
+# RUN adduser -D $USER
 # RUN adduser -D $USER \
 #         && echo "$USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USER \
 #         && chmod 0440 /etc/sudoers.d/$USER
 
+RUN mkdir -p /app/data
 WORKDIR /app
 
 ARG APPNAME=promnats
@@ -46,9 +47,8 @@ ARG VERSION=0.0.0-dev
 COPY --from=builder /app/out/${APPNAME} /usr/local/bin/${APPNAME}
 COPY entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/*
-EXPOSE 2112
+RUN chmod +x /usr/local/bin/* 
 
 ENTRYPOINT ["entrypoint.sh"]
 
-CMD ["chips", "micro", "server"]
+CMD ["promnats"]

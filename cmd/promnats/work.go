@@ -28,6 +28,7 @@ func stopServers() error {
 
 // work sets up the http handlers for each entry in portmap
 func work(nc *nats.Conn) error {
+	//TODO: only stop changed or dropped servers
 	stopServers()
 
 	// loop every entry in opts.Portmap
@@ -38,18 +39,18 @@ func work(nc *nats.Conn) error {
 		// create a http.Server with given port
 		server := &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
-			Handler: mux,
+			Handler: WrapHandler(mux),
 		}
 		opts.Servers = append(opts.Servers, server)
 		// run server in go func
 		opts.serversWg.Add(1)
 		go func(subj string) {
 			defer opts.serversWg.Done()
-			log.Info().Str("addr", server.Addr).Str("subj", subj).Msg("listening")
+			log.Info().Str("addr", server.Addr).Str("subj", subj).Msg("value server listening")
 			err := server.ListenAndServe()
 			if err != nil {
 				// TODO: Should we try to restart or crash application?
-				log.Error().Err(err).Str("server", server.Addr).Str("subj", subj).Msg("server died")
+				log.Error().Err(err).Str("server", server.Addr).Str("subj", subj).Msg("value server died")
 				if !opts.Closing {
 					panic(err)
 				}

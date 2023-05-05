@@ -2,3 +2,4 @@ metrics/
 out/
 *.secret.*
 *-secret.*
+mapping.txt

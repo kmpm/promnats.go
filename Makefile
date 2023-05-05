@@ -1,7 +1,7 @@
 
 GOOS=$(shell go env GOOS)
 GOARCH=$(shell go env GOARCH)
-RUNARGS?=-verbosity debug -mapping .\mappings-secret.txt -context hermod-rfid
+RUNARGS?=-verbosity debug  -context hermod-rfid
 NAME=promnats
 CNREPO?=kapidevops
 CNNAME=$(CNREPO)/$(NAME)
