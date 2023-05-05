@@ -119,7 +119,7 @@ func handleDiscovery(nc *nats.Conn, startport int, host string) func(http.Respon
 
 		for grpn, dg := range groups {
 			entry := HttpEntry{
-				Labels:  map[string]string{"__meta_prometheus_job": grpn},
+				Labels:  map[string]string{"__meta_prometheus_job": grpn, "subject_group": grpn},
 				Targets: make([]string, 0),
 			}
 			for _, d := range dg {

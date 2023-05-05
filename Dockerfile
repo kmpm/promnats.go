@@ -48,6 +48,7 @@ COPY --from=builder /app/out/${APPNAME} /usr/local/bin/${APPNAME}
 COPY entrypoint.sh /usr/local/bin/
 
 RUN chmod +x /usr/local/bin/* 
+EXPOSE 8083
 
 ENTRYPOINT ["entrypoint.sh"]
 

@@ -67,7 +67,7 @@ func makeHandler(subj string, nc *nats.Conn) func(http.ResponseWriter, *http.Req
 		start := time.Now()
 		// send nats request with context from http.Request
 		// wait for first answer
-		msgs, err := doReq(r.Context(), nil, subj, 1, nc)
+		msgs, err := doReq(r.Context(), nil, "metrics."+subj, 1, nc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Error().Err(err).Str("subj", subj).Msg("doReq error")

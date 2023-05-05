@@ -19,20 +19,20 @@ import (
 )
 
 type Opts struct {
-	Context       string
-	Server        string
-	Nkey          string
-	Timeout       time.Duration
-	Verbosity     string
-	Portmap       map[int]string
-	MappingFile   string
-	PrettyLog     bool
-	Servers       []*http.Server
-	Closing       bool
-	serversWg     sync.WaitGroup
-	DiscoveryHost string
-	Version       bool
-	Host          string
+	Context     string
+	Server      string
+	Nkey        string
+	Timeout     time.Duration
+	Verbosity   string
+	Portmap     map[int]string
+	MappingFile string
+	PrettyLog   bool
+	Servers     []*http.Server
+	Closing     bool
+	serversWg   sync.WaitGroup
+	// DiscoveryHost string
+	Version bool
+	Host    string
 }
 
 var opts Opts
@@ -58,8 +58,9 @@ func init() {
 	flag.StringVar(&opts.MappingFile, "mapping", "./mapping.txt", "path to file with <port>:<subject> mappings instead of args")
 	flag.BoolVar(&opts.PrettyLog, "pretty", false, "pretty logging")
 
-	flag.StringVar(&opts.DiscoveryHost, "discovery", "", "ip / hostname to show in http_sd")
+	// flag.StringVar(&opts.DiscoveryHost, "discovery", "", "ip / hostname to show in http_sd")
 	flag.BoolVar(&opts.Version, "version", false, "show version and eit")
+	flag.StringVar(&opts.Host, "host", "", "host to use for http_sd. defaults to local IP if only 1")
 }
 
 func main() {
@@ -136,7 +137,7 @@ func main() {
 		}
 	}
 
-	err = discover(nc, ":8083", opts.DiscoveryHost)
+	err = discover(nc, ":8083", opts.Host)
 	if err != nil {
 		log.Fatal().Err(err).Msg("error discovering")
 	}
