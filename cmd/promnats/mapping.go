@@ -4,36 +4,66 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"strconv"
 	"strings"
 )
 
-// fileMappings reads filename, line by line and adds them to portmap if valid
-func fileMappings(filename string) error {
+type PortMaps map[int]string
+
+// parsePortmap takes a <port>:<ID> string input and parses it
+func parsePortmap(s string) (port int, id string, err error) {
+	parts := strings.Split(s, ":")
+	if len(parts) < 2 {
+		err = fmt.Errorf("each mapping must contain 2 parts: %v", parts)
+		return
+	}
+	id = parts[1]
+
+	port, err = strconv.Atoi(parts[0])
+	if err != nil {
+		err = fmt.Errorf("value '%s' is not parsable as port number: %W", parts[0], err)
+		return
+	}
+
+	if port > 65535 || port < 0 {
+		err = fmt.Errorf("%d is not a valid port number", port)
+	}
+
+	return
+}
+
+// fileMappings reads filename, line by line and returns valid ones
+func fileMappings(filename string) (out PortMaps, err error) {
+	out = make(PortMaps)
 	if filename == "" {
-		return fmt.Errorf("empty filename")
+		err = fmt.Errorf("empty filename")
+		return
 	}
 	var fil *os.File
+	var info fs.FileInfo
 	// check filename if path exists
-	info, err := os.Stat(filename)
+	info, err = os.Stat(filename)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			fil, err = os.Create(filename)
 			if err != nil {
-				return err
+				return
 			}
-
+			fil.Close()
 		}
-		return err
+		return
 	} else {
 		// cant be a dir
 		if info.IsDir() {
-			return errors.New("path is a directory")
+			err = errors.New("path is a directory")
+			return
 		}
 		// open the file
 		fil, err = os.Open(filename)
 		if err != nil {
-			return err
+			return
 		}
 	}
 	defer fil.Close()
@@ -41,6 +71,8 @@ func fileMappings(filename string) error {
 	// read line by line
 	s := bufio.NewScanner(fil)
 	s.Split(bufio.ScanLines)
+	var port int
+	var id string
 	for s.Scan() {
 		// trim any bad characters
 		line := strings.Trim(s.Text(), " \t\r\n")
@@ -52,11 +84,13 @@ func fileMappings(filename string) error {
 		if line == "" {
 			continue
 		}
+
 		// parse and possibly add
-		err = addPortmap(line)
+		port, id, err = parsePortmap(line)
 		if err != nil {
-			return err
+			return
 		}
+		out[port] = id
 	}
-	return nil
+	return
 }

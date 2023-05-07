@@ -1,73 +1,89 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/rs/zerolog/log"
 )
 
-func stopServers() error {
-	opts.Closing = true
-	defer func() {
-		opts.serversWg.Wait()
-		opts.Closing = false
-	}()
-
-	for _, s := range opts.Servers {
-		err := s.Close()
-		if err != nil {
-			return err
-		}
-	}
-	opts.Servers = nil
-	return nil
-}
-
 // work sets up the http handlers for each entry in portmap
-func work(nc *nats.Conn) error {
-	//TODO: only stop changed or dropped servers
-	stopServers()
+func (a *application) refresh(pm PortMaps) error {
+	if len(pm) > 0 {
+		a.portmaps = pm
+	}
+	running := make([]int, 0)
+	for port, subj := range a.portmaps {
+		if _, ok := a.servers[port]; ok {
+			running = append(running, port)
+			continue
+		}
 
-	// loop every entry in opts.Portmap
-	for port, subj := range opts.Portmap {
 		// create a multiplexer with metrics handler
 		mux := http.NewServeMux()
-		mux.HandleFunc("/metrics", makeHandler(subj, nc))
+		mux.HandleFunc("/metrics", a.makeHandler(port))
 		// create a http.Server with given port
-		server := &http.Server{
+		s := &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: WrapHandler(mux),
 		}
-		opts.Servers = append(opts.Servers, server)
+		err := a.setServer(port, s)
+		check(err)
+		running = append(running, port)
+
 		// run server in go func
-		opts.serversWg.Add(1)
+		a.wg.Add(1)
 		go func(subj string) {
-			defer opts.serversWg.Done()
-			log.Info().Str("addr", server.Addr).Str("subj", subj).Msg("value server listening")
-			err := server.ListenAndServe()
+			defer a.wg.Done()
+			log.Info().Str("addr", s.Addr).Str("subj", subj).Msg("value server listening")
+			err := s.ListenAndServe()
 			if err != nil {
-				// TODO: Should we try to restart or crash application?
-				log.Error().Err(err).Str("server", server.Addr).Str("subj", subj).Msg("value server died")
-				if !opts.Closing {
-					panic(err)
+				if !a.closing {
+					log.Warn().Err(err).Str("server", s.Addr).Str("subj", subj).Msg("value server died")
 				}
+
 			}
 		}(subj)
+	}
+
+	var found bool
+	var toDelete []int
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for serverport, s := range a.servers {
+		found = false
+		for _, runningport := range running {
+			if serverport == runningport {
+				found = true
+				break
+			}
+		}
+		if !found {
+			s.Shutdown(ctx)
+			toDelete = append(toDelete, serverport)
+		}
+	}
+	for _, port := range toDelete {
+		delete(a.servers, port)
+		delete(a.portmaps, port)
 	}
 	return nil
 }
 
-func makeHandler(subj string, nc *nats.Conn) func(http.ResponseWriter, *http.Request) {
+func (a *application) makeHandler(port int) func(http.ResponseWriter, *http.Request) {
 	// return a http handler
 	return func(w http.ResponseWriter, r *http.Request) {
 		// save start-time to be able to calculate response time later
 		start := time.Now()
+		subj, ok := a.portmaps[port]
+		if !ok {
+			http.Error(w, "not found", http.StatusNotFound)
+		}
 		// send nats request with context from http.Request
 		// wait for first answer
-		msgs, err := doReq(r.Context(), nil, "metrics."+subj, 1, nc)
+		msgs, err := doReq(r.Context(), nil, "metrics."+subj, 1, a.nc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Error().Err(err).Str("subj", subj).Msg("doReq error")

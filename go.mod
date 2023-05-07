@@ -3,6 +3,7 @@ module github.com/kmpm/promnats.go
 go 1.20
 
 require (
+	github.com/kmpm/flagenvfile.go v0.0.0-00010101000000-000000000000
 	github.com/nats-io/jsm.go v0.0.35
 	github.com/nats-io/nats.go v1.25.0
 	github.com/prometheus/client_golang v1.15.0
@@ -26,3 +27,5 @@ require (
 	golang.org/x/sys v0.7.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 )
+
+replace github.com/kmpm/flagenvfile.go => ../flagenvfile.go

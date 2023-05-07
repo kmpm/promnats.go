@@ -8,6 +8,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+func check(err error) {
+	if err != nil {
+		log.Panic().Err(err).Msg("unexpected error")
+	}
+}
+
 type LogRecord struct {
 	http.ResponseWriter
 	status int

@@ -24,49 +24,39 @@ type HttpEntry struct {
 	Labels  map[string]string `json:"labels"`
 }
 
-func discover(nc *nats.Conn, addr, host string) error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/discover", handleDiscovery(nc, 9000, host))
-
-	server := &http.Server{
-		Addr:    addr,
-		Handler: WrapHandler(mux),
-	}
-
-	// run server in go func
-	go func() {
-		log.Info().Str("addr", server.Addr).Msg("discovery server started")
-		err := server.ListenAndServe()
-		if err != nil {
-			// TODO: Should we try to restart or crash application?
-			log.Error().Err(err).Any("server", server).Msg("discovery server died")
-			panic(err)
-		}
-	}()
-
-	return nil
-}
-
 type discovered struct {
 	id    string
 	parts []string
 	port  int
 }
 
-func handleDiscovery(nc *nats.Conn, startport int, host string) func(http.ResponseWriter, *http.Request) {
+// handleDiscory create a http handler that returns a JSON for prometheus http service discovery
+// [
+//
+//	{
+//	  "targets": [ "<host>", ... ],
+//	  "labels": {
+//	    "<labelname>": "<labelvalue>", ...
+//	  }
+//	},
+//	...
+//
+// ]
+func handleDiscovery(nc *nats.Conn, startport int, host string, refresh func(PortMaps) error) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
 
-		// read/update existing portmap
-		err := fileMappings(opts.MappingFile)
+		// read existing portmap so that services hopefully
+		// ends up as the same target every time
+		pm, err := fileMappings(opts.MappingFile)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		// create a reversed map from opts.Portmap
 		flipmap := map[string]int{}
 		maxport := startport
-		for port, pnid := range opts.Portmap {
+		for port, pnid := range pm {
 			flipmap[pnid] = port
 			if port > maxport {
 				maxport = port
@@ -74,6 +64,7 @@ func handleDiscovery(nc *nats.Conn, startport int, host string) func(http.Respon
 		}
 		maxport = maxport + 1
 
+		// ask for data using a nats request
 		msgs, err := doReq(r.Context(), nil, "metrics", 0, nc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -85,20 +76,21 @@ func handleDiscovery(nc *nats.Conn, startport int, host string) func(http.Respon
 		nextport := maxport
 
 		httpsd := []HttpEntry{}
+		var port int = 0
 		for _, m := range msgs {
 			pnid := m.Header.Get(promnats.HeaderPnID)
 			if pnid == "" {
 				continue
 			}
-			port := 0
+			port = 0
 			for port == 0 {
 				if p, ok := flipmap[pnid]; ok {
 					//we have a port for that id, reuse
 					port = p
-				} else if _, ok := opts.Portmap[nextport]; !ok {
+				} else if _, ok := pm[nextport]; !ok {
 					//no such port is used... claim it
 					port = nextport
-					opts.Portmap[port] = pnid
+					pm[port] = pnid
 					flipmap[pnid] = port
 				} else {
 					//try next port
@@ -138,21 +130,19 @@ func handleDiscovery(nc *nats.Conn, startport int, host string) func(http.Respon
 		if err != nil {
 			log.Error().Err(err).Msg("error writing discovery response")
 		}
-		err = savePortmapSafe(opts.MappingFile)
+		err = savePortmapSafe(opts.MappingFile, pm)
 		if err != nil {
 			log.Error().Err(err).Msg("error saving portmap")
 		} else {
 			log.Info().Str("file", opts.MappingFile).Msg("portmap saved")
-			err = work(nc)
-			if err != nil {
-				panic(err)
-			}
+			err = refresh(pm)
+			check(err)
 		}
 
 	}
 }
 
-func savePortmapSafe(filename string) error {
+func savePortmapSafe(filename string, pm PortMaps) error {
 	newname := opts.MappingFile + ".new"
 	defer func() {
 		err := os.Remove(newname)
@@ -161,7 +151,7 @@ func savePortmapSafe(filename string) error {
 		}
 	}()
 
-	err := savePortmap(newname)
+	err := savePortmap(newname, pm)
 	if err != nil {
 		return err
 	}
@@ -192,7 +182,7 @@ func copy(from, to string) error {
 	return err
 }
 
-func savePortmap(filename string) error {
+func savePortmap(filename string, pm PortMaps) error {
 	f, err := os.Create(filename)
 	if err != nil {
 		return err
@@ -201,16 +191,16 @@ func savePortmap(filename string) error {
 
 	w := bufio.NewWriter(f)
 
-	keys := make([]int, len(opts.Portmap))
+	keys := make([]int, len(pm))
 
 	i := 0
-	for k := range opts.Portmap {
-		keys[i] = k
+	for k := range pm {
+		keys[i] = int(k)
 		i++
 	}
 	sort.Ints(keys)
 	for _, k := range keys {
-		pnid := opts.Portmap[k]
+		pnid := pm[k]
 		_, err = w.WriteString(fmt.Sprintf("%d:%s\n", k, pnid))
 		if err != nil {
 			return err

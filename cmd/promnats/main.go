@@ -3,72 +3,80 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net/http"
-	"sync"
+	"os/signal"
+	"syscall"
 
 	"os"
-	"runtime"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/kmpm/flagenvfile.go"
 	"github.com/nats-io/jsm.go/natscontext"
 	"github.com/nats-io/nats.go"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-type Opts struct {
-	Context     string
-	Server      string
-	Nkey        string
-	Timeout     time.Duration
-	Verbosity   string
-	Portmap     map[int]string
+type options struct {
+	Context   string
+	Server    string
+	Nkey      string
+	Timeout   time.Duration
+	Verbosity string
+	// Portmap     PortMap
 	MappingFile string
 	PrettyLog   bool
-	Servers     []*http.Server
-	Closing     bool
-	serversWg   sync.WaitGroup
+
 	// DiscoveryHost string
 	Version bool
 	Host    string
 }
 
-var opts Opts
-var mu sync.Mutex
+var opts *options
 var appVersion = "0.0.0-dev"
 
 func init() {
 	// initialize opts
-	opts = Opts{
-		Portmap: make(map[int]string),
-		Servers: make([]*http.Server, 0),
-	}
-	mu.Lock()
-	defer mu.Unlock()
+	opts = &options{}
+
 	// add some flags for connection
-	flag.StringVar(&opts.Context, "context", "", "context")
-	flag.StringVar(&opts.Server, "server", "", "server like "+nats.DefaultURL)
-	flag.StringVar(&opts.Nkey, "nkey", "", "pathto nkey file")
+	flag.String("context", "", "context")
+	flag.String("server", "", "server like "+nats.DefaultURL)
+	flag.String("nkey", "", "pathto nkey file")
 
 	// flags for other config
-	flag.StringVar(&opts.Verbosity, "verbosity", "info", "debug|info|warn|error")
-	flag.DurationVar(&opts.Timeout, "timeout", time.Second*2, "time waiting for replies")
-	flag.StringVar(&opts.MappingFile, "mapping", "./mapping.txt", "path to file with <port>:<subject> mappings instead of args")
-	flag.BoolVar(&opts.PrettyLog, "pretty", false, "pretty logging")
+	flag.String("verbosity", "info", "debug|info|warn|error")
+	flag.Duration("timeout", time.Second*2, "time waiting for replies")
+	flag.String("mapping", "./mapping.txt", "path to file with <port>:<subject> mappings instead of args")
+	flag.Bool("pretty", false, "pretty logging")
 
 	// flag.StringVar(&opts.DiscoveryHost, "discovery", "", "ip / hostname to show in http_sd")
-	flag.BoolVar(&opts.Version, "version", false, "show version and eit")
-	flag.StringVar(&opts.Host, "host", "", "host to use for http_sd. defaults to local IP if only 1")
+	flag.Bool("version", false, "show version and eit")
+	flag.String("host", "", "host to use for http_sd. defaults to local IP if only 1")
+}
+
+func (o *options) fromFEF() error {
+	opts.Verbosity = flagenvfile.GetString("verbosity")
+	opts.PrettyLog = flagenvfile.GetBool("pretty")
+	opts.Version = flagenvfile.GetBool("version")
+	opts.MappingFile = flagenvfile.GetString("mapping")
+	opts.Context = flagenvfile.GetString("context")
+	opts.Server = flagenvfile.GetString("server")
+	opts.Nkey = flagenvfile.GetString("nkey")
+	opts.Host = flagenvfile.GetString("host")
+	opts.Timeout = flagenvfile.GetDuration("timeout")
+	return nil
 }
 
 func main() {
 	flag.Parse()
+	flagenvfile.BindFlagset(flag.CommandLine)
+	flagenvfile.SetEnvPrefix("PN")
+	opts.fromFEF()
 	if opts.Version {
 		fmt.Println(appVersion)
 		os.Exit(0)
 	}
+
 	// setup logging
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	switch opts.Verbosity {
@@ -89,7 +97,7 @@ func main() {
 	}
 
 	log.Info().Str("version", appVersion).Msg("")
-
+	log.Debug().Any("opts", opts).Msg("current options")
 	if opts.Host == "" {
 		ips := GetLocalIP()
 		if len(ips) > 1 && opts.Host == "" {
@@ -100,89 +108,87 @@ func main() {
 		}
 		opts.Host = ips[0]
 	}
-
+	app := newApp()
 	var err error
+	var pm PortMaps
 	// load mappings from file
 	if opts.MappingFile != "" {
-		mu.Lock()
-		err = fileMappings(opts.MappingFile)
+
+		pm, err = fileMappings(opts.MappingFile)
 		if err != nil {
 			log.Fatal().Err(err).Str("mapping", opts.MappingFile).Msg("error reading mappings")
 		}
-		mu.Unlock()
+
 	}
 
 	// get other mappings from args
-	mu.Lock()
-	err = argMappings()
+	err = argMappings(pm)
 	if err != nil {
 		log.Fatal().Err(err).Msg("error parsing arguments")
 	}
-	mu.Unlock()
 
 	// open connection by context or server
 	if opts.Server != "" && opts.Context != "" {
 		log.Fatal().Msg("you must not use both context and server")
 	}
-	var nc *nats.Conn
+
 	if opts.Server == "" {
-		nc, err = natscontext.Connect(opts.Context)
+		app.nc, err = natscontext.Connect(opts.Context)
 		if err != nil {
 			log.Fatal().Err(err).Msg("error connecting using nats context")
 		}
 	} else {
-		nc, err = nats.Connect(opts.Server)
+		app.nc, err = nats.Connect(opts.Server)
 		if err != nil {
 			log.Fatal().Err(err).Msg("error connecting to server")
 		}
 	}
 
-	err = discover(nc, ":8083", opts.Host)
+	err = app.start(":8083", opts.Host, 9000)
 	if err != nil {
-		log.Fatal().Err(err).Msg("error discovering")
+		log.Fatal().Err(err).Msg("error starting")
 	}
 
-	if len(opts.Portmap) > 0 {
+	if len(pm) > 0 {
 		// do aktual work
-		err = work(nc)
+		err = app.refresh(pm)
 		if err != nil {
 			log.Fatal().Err(err).Msg("error doing work")
 		}
 	}
+	sigs := make(chan os.Signal, 1)
+	done := make(chan bool, 1)
+
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigs
+		fmt.Println()
+		fmt.Println(sig)
+		done <- true
+	}()
 
 	// wait for things to close
-	fmt.Println("waiting")
-	runtime.Goexit()
-}
-
-// addPortman parses a string and adds to opts.Portmap if valid.
-func addPortmap(s string) error {
-	parts := strings.Split(s, ":")
-	if len(parts) < 2 {
-		return fmt.Errorf("each mapping must contain 2 parts: %v", parts)
-	}
-
-	port, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return fmt.Errorf("value '%s' is not parsable as port number: %W", parts[0], err)
-	}
-
-	opts.Portmap[port] = parts[1]
-	return nil
+	log.Info().Msg("running")
+	<-done
+	log.Info().Msg("closing")
+	app.stop()
+	log.Info().Msg("closed")
 }
 
 // argMappings adds arguments to anything that is allready in portmap
 // if portmap is empty there must be att least 1 argument with portmap config
-func argMappings() error {
+func argMappings(ps PortMaps) error {
 	// if len(opts.Portmap) == 0 && flag.NArg() < 1 {
 	// 	return fmt.Errorf("You must provide at least one <port>:<subject> argument")
 	// }
 
 	for _, pm := range flag.Args() {
-		err := addPortmap(pm)
+		port, id, err := parsePortmap(pm)
 		if err != nil {
 			return err
 		}
+		ps[port] = id
 	}
 	return nil
 }
