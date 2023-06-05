@@ -75,6 +75,18 @@ image:
 		--build-arg APPNAME=$(NAME) \
 		-t $(NAME):latest \
 		-f Dockerfile .
+		
+.PHONY: tags
+tags:
+	docker tag $(NAME):latest $(CNNAME):$(VERSION)
+	docker tag $(NAME):latest $(CNNAME):$(MAJOR)
+	docker tag $(NAME):latest $(CNNAME):$(MAJOR).$(MINOR)
+	docker tag $(NAME):latest $(CNNAME):$(MAJOR).$(MINOR).$(REVISION)
+	docker tag $(NAME):latest $(CNNAME):$(MAJOR).$(MINOR).$(REVISION)-$(PATCH)
+
+.PHONY: push
+push:
+	docker push -a $(CNNAME) 
 
 .PHONY: edge
 edge: tidy image

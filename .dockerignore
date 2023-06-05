@@ -2,3 +2,4 @@ out/
 .vscode/
 .git/
 *-secret.*
+*.env
