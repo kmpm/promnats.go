@@ -3,6 +3,7 @@ module github.com/kmpm/promnats.go
 go 1.20
 
 require (
+	github.com/kmpm/flagenvfile.go v0.0.0-20230507190947-2fb711425a25
 	github.com/nats-io/jsm.go v0.0.35
 	github.com/nats-io/nats.go v1.25.0
 	github.com/prometheus/client_golang v1.15.0
@@ -14,7 +15,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/kmpm/flagenvfile.go v0.0.0-20230507190947-2fb711425a25 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect

@@ -126,19 +126,19 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("error parsing arguments")
 	}
-
+	appname := "promnats " + appVersion
 	// open connection by context or server
 	if opts.Server != "" && opts.Context != "" {
 		log.Fatal().Msg("you must not use both context and server")
 	}
 
 	if opts.Server == "" {
-		app.nc, err = natscontext.Connect(opts.Context)
+		app.nc, err = natscontext.Connect(opts.Context, nats.Name(appname))
 		if err != nil {
 			log.Fatal().Err(err).Msg("error connecting using nats context")
 		}
 	} else {
-		app.nc, err = nats.Connect(opts.Server)
+		app.nc, err = nats.Connect(opts.Server, nats.Name(appname))
 		if err != nil {
 			log.Fatal().Err(err).Msg("error connecting to server")
 		}
