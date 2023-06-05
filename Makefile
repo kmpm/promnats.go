@@ -3,7 +3,7 @@ GOOS=$(shell go env GOOS)
 GOARCH=$(shell go env GOARCH)
 RUNARGS?=-verbosity debug
 NAME=promnats
-CNREPO?=kapidevops
+CNREPO?=your.docker.repo
 CNNAME=$(CNREPO)/$(NAME)
 
 ifeq ($(GOOS),windows) 

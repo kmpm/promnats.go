@@ -26,8 +26,10 @@ RUN go build -ldflags "-s -w -X 'main.appVersion=${VERSION}'" -o /app/out/${APPN
 
 
 # running container
-FROM alpine:latest
+FROM alpine:3.18
+LABEL org.opencontainers.image.base.name="alpine:3.18"
 LABEL org.opencontainers.image.source https://github.com/kmpm/promnats.go
+
 ARG USER=default
 
 # install sudo as root

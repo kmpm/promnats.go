@@ -4,3 +4,4 @@ out/
 *.secret.*
 *-secret.*
 mapping.txt
+*.env
