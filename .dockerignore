@@ -1,4 +1,5 @@
 out/
+contrib/
 .vscode/
 .git/
 *-secret.*
