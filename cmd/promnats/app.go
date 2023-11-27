@@ -3,51 +3,32 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"path"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/rs/zerolog/log"
 )
 
 type application struct {
-	servers  map[int]*http.Server
-	server   *http.Server
-	portmaps PortMaps
-	mu       sync.Mutex
-	closing  bool
-	wg       sync.WaitGroup
-	nc       *nats.Conn
+	servers map[int]*http.Server
+	server  *http.Server
+
+	discoveries map[string]discovered
+	mu          sync.Mutex
+	closing     bool
+	wg          sync.WaitGroup
+	nc          *nats.Conn
 }
 
 func newApp() *application {
 	return &application{
-		servers:  make(map[int]*http.Server),
-		portmaps: make(PortMaps),
+		servers:     make(map[int]*http.Server),
+		discoveries: map[string]discovered{},
 	}
-}
-
-func (a *application) setServer(port int, srv *http.Server) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if _, ok := a.servers[port]; ok {
-		return fmt.Errorf("server with port %d already exists", port)
-	}
-	a.servers[port] = srv
-	return nil
-}
-
-func (a *application) clearServer(port int) error {
-	if s, ok := a.servers[port]; ok {
-		err := s.Shutdown(context.Background())
-		if err != nil {
-			return err
-		}
-		delete(a.servers, port)
-		delete(a.portmaps, port)
-	}
-	return nil
 }
 
 func (a *application) stop() error {
@@ -61,7 +42,7 @@ func (a *application) stop() error {
 	for _, s := range a.servers {
 		err := s.Shutdown(ctx)
 		if err != nil {
-			log.Error().Err(err).Msg("error shutting down server")
+			slog.Error("error shutting down server", "error", err)
 		}
 	}
 	a.servers = nil
@@ -71,12 +52,54 @@ func (a *application) stop() error {
 
 }
 
+// shiftPath splits the given path into the first segment (head) and
+// the rest (tail). For example, "/foo/bar/baz" gives "foo", "/bar/baz".
+func shiftPath(p string) (head, tail string) {
+	p = path.Clean("/" + p)
+	i := strings.Index(p[1:], "/") + 1
+	if i <= 0 {
+		return p[1:], "/"
+	}
+	return p[1:i], p[i:]
+}
+
 func (a *application) start(addr, host string, startport int) error {
 	if a.server != nil {
 		return fmt.Errorf("can not start a started application")
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/discover", handleDiscovery(a.nc, startport, host, a.refresh))
+	// mux.HandleFunc("/discover", handleDiscovery(a.nc, startport, host, a.refresh))
+	handleDiscovery := handleDiscoveryPaths(a.nc, startport, host, a.refreshPaths)
+	handlePath := a.makePathHandler()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		var head string
+		head, r.URL.Path = shiftPath(r.URL.Path)
+		// log.Debug().Str("head", head).Str("path", r.URL.Path).Msg("shifted path")
+		switch head {
+		case "metrics":
+			if a.discoveries == nil || len(a.discoveries) == 0 {
+				go func() {
+					paths, err := discoverPaths(context.Background(), a.nc, host, startport)
+					if err != nil {
+						slog.Error("error discovering paths", "error", err)
+						return
+					}
+					err = a.refreshPaths(paths)
+					if err != nil {
+						slog.Error("error refreshing paths", "error", err)
+						return
+					}
+				}()
+			}
+			handlePath(w, r)
+			return
+		case "discover":
+			handleDiscovery(w, r)
+			return
+		}
+		http.NotFound(w, r)
+	})
 
 	a.server = &http.Server{
 		Addr:    addr,
@@ -86,12 +109,12 @@ func (a *application) start(addr, host string, startport int) error {
 	// run server in go func
 	go func() {
 		defer a.wg.Done()
-		log.Info().Str("addr", a.server.Addr).Msg("discovery server started")
+		slog.Info("discovery server started", "addr", a.server.Addr)
 		err := a.server.ListenAndServe()
 		if err != nil {
-			// TODO: Should we try to restart or crash application?
+			// panic if not closing
 			if !a.closing {
-				log.Panic().Err(err).Any("server", a.server.Addr).Msg("discovery server died")
+				panic(fmt.Errorf("discovery server died: %w", err))
 			}
 		}
 	}()

@@ -1,5 +1,5 @@
 
-FROM golang:1.20-alpine as builder
+FROM golang:1.21-alpine as builder
 ARG GITHUB_USER=someuser
 ARG GITHUB_PASSWORD=somepassword
 
@@ -9,9 +9,9 @@ RUN mkdir -p /app
 WORKDIR /app
 
 # configure for private repositories
-ENV GOPRIVATE=github.com/lavoqualis/*,github.com/kapigo/*
-RUN echo "machine github.com login $GITHUB_USER password $GITHUB_PASSWORD" > $HOME/.netrc && \
-    chmod 600 $HOME/.netrc
+#ENV GOPRIVATE=
+#RUN echo "machine github.com login $GITHUB_USER password $GITHUB_PASSWORD" > $HOME/.netrc && \
+#    chmod 600 $HOME/.netrc
  
 ARG APPNAME=promnats
 ARG VERSION=0.0.0-dev   

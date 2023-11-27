@@ -18,6 +18,7 @@ ifeq ($(OS),Windows_NT)
 	RM = del
 	MKDIR = mkdir
 	CP = copy
+	PWD = $(subst \,/,$(subst :,:,$(shell cd)))
 else
 	FixPath = $1
 	MKDIR = mkdir -p
@@ -92,3 +93,10 @@ push:
 edge: tidy image
 	docker tag $(NAME):latest $(CNNAME):edge
 	
+.PHONY: testserver
+testserver:
+	docker run -it --rm \
+		-p 9090:9090 \
+		-v "$(call FixPath,$(PWD)/contrib/prometheus):/etc/prometheus/contrib" \
+		prom/prometheus \
+		--config.file=/etc/prometheus/contrib/prometheus.yml

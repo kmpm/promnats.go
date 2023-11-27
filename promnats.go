@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -140,7 +140,7 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 		if err != nil {
 			//TODO: notify shomehow
 			if cfg.Debug {
-				log.Printf("error handling message %v", err)
+				slog.Debug("error handling message", "err", err)
 			}
 		}
 	}
@@ -151,7 +151,7 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 		}
 	}
 	if cfg.Debug {
-		log.Printf("configured subjects %v", cfg.Subjects)
+		slog.Debug("configured subjects", "subjects", cfg.Subjects)
 	}
 	for _, subj := range cfg.Subjects {
 		if subj != "" {
@@ -166,7 +166,7 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 		}
 		cfg.Subs = append(cfg.Subs, sub)
 		if cfg.Debug {
-			log.Printf("subscribing to %s", subj)
+			slog.Debug("subscribing to", "subject", subj)
 		}
 	}
 
@@ -177,7 +177,7 @@ func handleMsg(msg *nats.Msg, cfg *options, reg prometheus.TransactionalGatherer
 	start := time.Now()
 	if cfg.Debug {
 		defer func() {
-			log.Printf("promnats response time: %s", time.Since(start))
+			slog.Debug("promnats response time", "time", time.Since(start))
 		}()
 	}
 	mfs, done, err := reg.Gather()
@@ -215,7 +215,7 @@ func handleMsg(msg *nats.Msg, cfg *options, reg prometheus.TransactionalGatherer
 	err = msg.RespondMsg(resp)
 	if err != nil {
 		//log error
-		log.Printf("error sending reply: %v", err)
+		slog.Error("error sending reply", "err", err)
 	}
 
 	return nil

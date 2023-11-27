@@ -1,99 +1,52 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"strings"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
-// work sets up the http handlers for each entry in portmap
-func (a *application) refresh(pm PortMaps) error {
-	if len(pm) > 0 {
-		a.portmaps = pm
-	}
-	running := make([]int, 0)
-	for port, subj := range a.portmaps {
-		if _, ok := a.servers[port]; ok {
-			running = append(running, port)
-			continue
-		}
-
-		// create a multiplexer with metrics handler
-		mux := http.NewServeMux()
-		mux.HandleFunc("/metrics", a.makeHandler(port))
-		// create a http.Server with given port
-		s := &http.Server{
-			Addr:    fmt.Sprintf(":%d", port),
-			Handler: WrapHandler(mux),
-		}
-		err := a.setServer(port, s)
-		check(err)
-		running = append(running, port)
-
-		// run server in go func
-		a.wg.Add(1)
-		go func(subj string) {
-			defer a.wg.Done()
-			log.Info().Str("addr", s.Addr).Str("subj", subj).Msg("value server listening")
-			err := s.ListenAndServe()
-			if err != nil {
-				if !a.closing {
-					log.Warn().Err(err).Str("server", s.Addr).Str("subj", subj).Msg("value server died")
-				}
-
-			}
-		}(subj)
-	}
-
-	var found bool
-	var toDelete []int
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	for serverport, s := range a.servers {
-		found = false
-		for _, runningport := range running {
-			if serverport == runningport {
-				found = true
-				break
-			}
-		}
-		if !found {
-			s.Shutdown(ctx)
-			toDelete = append(toDelete, serverport)
-		}
-	}
-	for _, port := range toDelete {
-		delete(a.servers, port)
-		delete(a.portmaps, port)
-	}
+func (a *application) refreshPaths(discoveries map[string]discovered) error {
+	a.mu.Lock()
+	defer func() {
+		slog.Debug("refreshPaths done")
+		a.mu.Unlock()
+	}()
+	slog.Debug("refreshPaths")
+	a.discoveries = discoveries
 	return nil
 }
 
-func (a *application) makeHandler(port int) func(http.ResponseWriter, *http.Request) {
+func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request) {
 	// return a http handler
 	return func(w http.ResponseWriter, r *http.Request) {
 		// save start-time to be able to calculate response time later
 		start := time.Now()
-		subj, ok := a.portmaps[port]
+
+		key := strings.TrimPrefix(r.URL.Path, "/")
+
+		disc, ok := a.discoveries[key]
 		if !ok {
+			slog.Warn("not found", "path", r.URL.Path, "key", key, "discoveries", a.discoveries)
 			http.Error(w, "not found", http.StatusNotFound)
+			return
 		}
+		subj := disc.id
 		// send nats request with context from http.Request
 		// wait for first answer
 		msgs, err := doReq(r.Context(), nil, "metrics."+subj, 1, a.nc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Error().Err(err).Str("subj", subj).Msg("doReq error")
+			slog.Error("doReq error", "error", err, "subject", subj)
 			return
 		}
 
 		// should have at least one message
 		if len(msgs) < 1 {
 			http.Error(w, fmt.Sprintf("%s not found", subj), http.StatusNotFound)
-			log.Warn().Str("subj", subj).Msg("not found")
+			slog.Warn("not found", "subject", subj)
 			return
 		}
 
@@ -108,9 +61,9 @@ func (a *application) makeHandler(port int) func(http.ResponseWriter, *http.Requ
 		// respond with data
 		size, err := w.Write(msg.Data)
 		if err != nil {
-			log.Warn().Err(err).Str("subj", subj).Dur("response_time", time.Since(start)).Msg("error responding")
+			slog.Warn("error responding", "error", err, "subject", subj, "response_time", time.Since(start))
 		} else {
-			log.Debug().Str("subj", subj).Int("size", size).Err(err).Dur("response_time", time.Since(start)).Msg("responding")
+			slog.Debug("responding", "subject", subj, "size", size, "response_time", time.Since(start), "error", err)
 		}
 	}
 }

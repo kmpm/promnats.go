@@ -3,7 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
+	"net"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"os"
@@ -12,8 +15,6 @@ import (
 	"github.com/kmpm/flagenvfile.go"
 	"github.com/nats-io/jsm.go/natscontext"
 	"github.com/nats-io/nats.go"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 type options struct {
@@ -22,17 +23,15 @@ type options struct {
 	Nkey      string
 	Timeout   time.Duration
 	Verbosity string
-	// Portmap     PortMap
-	MappingFile string
-	PrettyLog   bool
-
-	// DiscoveryHost string
-	Version bool
-	Host    string
+	Address   string
+	PrettyLog bool
+	Host      string
+	Version   bool
 }
 
 var opts *options
 var appVersion = "0.0.0-dev"
+var programLevel = new(slog.LevelVar)
 
 func init() {
 	// initialize opts
@@ -46,10 +45,9 @@ func init() {
 	// flags for other config
 	flag.String("verbosity", "info", "debug|info|warn|error")
 	flag.Duration("timeout", time.Second*2, "time waiting for replies")
-	flag.String("mapping", "./mapping.txt", "path to file with <port>:<subject> mappings instead of args")
 	flag.Bool("pretty", false, "pretty logging")
 
-	// flag.StringVar(&opts.DiscoveryHost, "discovery", "", "ip / hostname to show in http_sd")
+	flag.String("address", ":8083", "address to listen on")
 	flag.Bool("version", false, "show version and eit")
 	flag.String("host", "", "host to use for http_sd. defaults to local IP if only 1")
 }
@@ -58,7 +56,7 @@ func (o *options) fromFEF() error {
 	opts.Verbosity = flagenvfile.GetString("verbosity")
 	opts.PrettyLog = flagenvfile.GetBool("pretty")
 	opts.Version = flagenvfile.GetBool("version")
-	opts.MappingFile = flagenvfile.GetString("mapping")
+	opts.Address = flagenvfile.GetString("address")
 	opts.Context = flagenvfile.GetString("context")
 	opts.Server = flagenvfile.GetString("server")
 	opts.Nkey = flagenvfile.GetString("nkey")
@@ -78,84 +76,77 @@ func main() {
 	}
 
 	// setup logging
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	ho := &slog.HandlerOptions{Level: programLevel, AddSource: opts.PrettyLog}
+
+	h := slog.NewTextHandler(os.Stderr, ho)
+	slog.SetDefault(slog.New(h))
+
 	switch opts.Verbosity {
 	case "debug":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		programLevel.Set(slog.LevelDebug)
 	case "info":
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		programLevel.Set(slog.LevelInfo)
 	case "warn":
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
+		programLevel.Set(slog.LevelWarn)
 	case "error":
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+		programLevel.Set(slog.LevelError)
 	default:
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		programLevel.Set(slog.LevelInfo)
 	}
 
-	if opts.PrettyLog {
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
-	}
+	// if opts.PrettyLog {
+	// 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
+	// }
+	var err error
+	var portS string
+	_, portS, err = net.SplitHostPort(opts.Address)
+	check(err)
+	port, err := strconv.Atoi(portS)
+	check(err)
 
-	log.Info().Str("version", appVersion).Msg("")
-	log.Debug().Any("opts", opts).Msg("current options")
+	slog.Info("starting", "version", appVersion)
+	slog.Debug("current options", "opts", opts)
 	if opts.Host == "" {
 		ips := GetLocalIP()
 		if len(ips) > 1 && opts.Host == "" {
-			log.Fatal().
-				Err(fmt.Errorf("more than 1 local ip found. please provide --host")).
-				Strs("ips", ips).
-				Msg("error getting host")
+			slog.Error("error! more than 1 local ip found. please provide --host", "ips", ips)
+			os.Exit(1)
+			// log.Fatal().
+			// 	Err(fmt.Errorf("more than 1 local ip found. please provide --host")).
+			// 	Strs("ips", ips).
+			// 	Msg("error getting host")
 		}
 		opts.Host = ips[0]
 	}
 	app := newApp()
-	var err error
-	var pm PortMaps
-	// load mappings from file
-	if opts.MappingFile != "" {
 
-		pm, err = fileMappings(opts.MappingFile)
-		if err != nil {
-			log.Fatal().Err(err).Str("mapping", opts.MappingFile).Msg("error reading mappings")
-		}
-
-	}
-
-	// get other mappings from args
-	err = argMappings(pm)
-	if err != nil {
-		log.Fatal().Err(err).Msg("error parsing arguments")
-	}
 	appname := "promnats " + appVersion
 	// open connection by context or server
 	if opts.Server != "" && opts.Context != "" {
-		log.Fatal().Msg("you must not use both context and server")
+		slog.Error("you must not use both context and server")
+		os.Exit(1)
 	}
 
 	if opts.Server == "" {
 		app.nc, err = natscontext.Connect(opts.Context, nats.Name(appname))
 		if err != nil {
-			log.Fatal().Err(err).Msg("error connecting using nats context")
+			slog.Error("error connecting using nats context", "error", err)
+			os.Exit(1)
 		}
 	} else {
 		app.nc, err = nats.Connect(opts.Server, nats.Name(appname))
 		if err != nil {
-			log.Fatal().Err(err).Msg("error connecting to server")
+			slog.Error("error connecting to server", "error", err)
+			os.Exit(1)
 		}
 	}
 
-	err = app.start(":8083", opts.Host, 9000)
+	err = app.start(opts.Address, opts.Host, port)
 	if err != nil {
-		log.Fatal().Err(err).Msg("error starting")
+		slog.Error("error starting", "error", err)
+		os.Exit(1)
 	}
 
-	if len(pm) > 0 {
-		// do aktual work
-		err = app.refresh(pm)
-		if err != nil {
-			log.Fatal().Err(err).Msg("error doing work")
-		}
-	}
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
 
@@ -169,26 +160,9 @@ func main() {
 	}()
 
 	// wait for things to close
-	log.Info().Msg("running")
+	slog.Info("running")
 	<-done
-	log.Info().Msg("closing")
+	slog.Info("closing")
 	app.stop()
-	log.Info().Msg("closed")
-}
-
-// argMappings adds arguments to anything that is allready in portmap
-// if portmap is empty there must be att least 1 argument with portmap config
-func argMappings(ps PortMaps) error {
-	// if len(opts.Portmap) == 0 && flag.NArg() < 1 {
-	// 	return fmt.Errorf("You must provide at least one <port>:<subject> argument")
-	// }
-
-	for _, pm := range flag.Args() {
-		port, id, err := parsePortmap(pm)
-		if err != nil {
-			return err
-		}
-		ps[port] = id
-	}
-	return nil
+	slog.Info("closed")
 }
