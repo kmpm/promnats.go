@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"path"
 	"strings"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/rs/zerolog/log"
 )
 
 type application struct {
@@ -42,7 +42,7 @@ func (a *application) stop() error {
 	for _, s := range a.servers {
 		err := s.Shutdown(ctx)
 		if err != nil {
-			log.Error().Err(err).Msg("error shutting down server")
+			slog.Error("error shutting down server", "error", err)
 		}
 	}
 	a.servers = nil
@@ -82,12 +82,12 @@ func (a *application) start(addr, host string, startport int) error {
 				go func() {
 					paths, err := discoverPaths(context.Background(), a.nc, host, startport)
 					if err != nil {
-						log.Error().Err(err).Msg("error discovering paths")
+						slog.Error("error discovering paths", "error", err)
 						return
 					}
 					err = a.refreshPaths(paths)
 					if err != nil {
-						log.Error().Err(err).Msg("error refreshing paths")
+						slog.Error("error refreshing paths", "error", err)
 						return
 					}
 				}()
@@ -109,12 +109,12 @@ func (a *application) start(addr, host string, startport int) error {
 	// run server in go func
 	go func() {
 		defer a.wg.Done()
-		log.Info().Str("addr", a.server.Addr).Msg("discovery server started")
+		slog.Info("discovery server started", "addr", a.server.Addr)
 		err := a.server.ListenAndServe()
 		if err != nil {
-			// TODO: Should we try to restart or crash application?
+			// panic if not closing
 			if !a.closing {
-				log.Panic().Err(err).Any("server", a.server.Addr).Msg("discovery server died")
+				panic(fmt.Errorf("discovery server died: %w", err))
 			}
 		}
 	}()

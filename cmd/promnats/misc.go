@@ -1,16 +1,16 @@
 package main
 
 import (
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
 func check(err error) {
 	if err != nil {
-		log.Panic().Err(err).Msg("unexpected error")
+		slog.Error("unexpected error", "error", err)
+		panic(err)
 	}
 }
 
@@ -36,22 +36,13 @@ func WrapHandler(f http.Handler) http.HandlerFunc {
 			ResponseWriter: w,
 		}
 		defer func() {
-			log.Debug().
-				Str("method", r.Method).
-				Str("path", r.URL.Path).
-				TimeDiff("response_time", time.Now(), t).
-				Msg("response")
+			slog.DebugContext(r.Context(), "response", "method", r.Method, "path", r.URL.Path, "status", record.status, "response_time", time.Since(t))
 		}()
 
 		f.ServeHTTP(record, r)
 
 		if record.status >= 400 {
-			log.Warn().
-				Int("status", record.status).
-				Str("method", r.Method).
-				Str("path", r.URL.Path).
-				TimeDiff("response_time", time.Now(), t).
-				Msg("Bad Request")
+			slog.WarnContext(r.Context(), "bad request", "status", record.status, "method", r.Method, "path", r.URL.Path, "response_time", time.Since(t))
 		}
 
 		// if record.status == http.StatusBadRequest {

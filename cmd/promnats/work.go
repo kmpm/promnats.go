@@ -2,20 +2,19 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/rs/zerolog/log"
 )
 
 func (a *application) refreshPaths(discoveries map[string]discovered) error {
 	a.mu.Lock()
 	defer func() {
-		log.Debug().Msg("refreshPaths done")
+		slog.Debug("refreshPaths done")
 		a.mu.Unlock()
 	}()
-	log.Debug().Msg("refreshPaths")
+	slog.Debug("refreshPaths")
 	a.discoveries = discoveries
 	return nil
 }
@@ -30,7 +29,7 @@ func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request)
 
 		disc, ok := a.discoveries[key]
 		if !ok {
-			log.Warn().Str("path", r.URL.Path).Str("key", key).Any("dsc", a.discoveries).Msg("not found")
+			slog.Warn("not found", "path", r.URL.Path, "key", key, "discoveries", a.discoveries)
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -40,14 +39,14 @@ func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request)
 		msgs, err := doReq(r.Context(), nil, "metrics."+subj, 1, a.nc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Error().Err(err).Str("subj", subj).Msg("doReq error")
+			slog.Error("doReq error", "error", err, "subject", subj)
 			return
 		}
 
 		// should have at least one message
 		if len(msgs) < 1 {
 			http.Error(w, fmt.Sprintf("%s not found", subj), http.StatusNotFound)
-			log.Warn().Str("subj", subj).Msg("not found")
+			slog.Warn("not found", "subject", subj)
 			return
 		}
 
@@ -62,9 +61,9 @@ func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request)
 		// respond with data
 		size, err := w.Write(msg.Data)
 		if err != nil {
-			log.Warn().Err(err).Str("subj", subj).Dur("response_time", time.Since(start)).Msg("error responding")
+			slog.Warn("error responding", "error", err, "subject", subj, "response_time", time.Since(start))
 		} else {
-			log.Debug().Str("subj", subj).Int("size", size).Err(err).Dur("response_time", time.Since(start)).Msg("responding")
+			slog.Debug("responding", "subject", subj, "size", size, "response_time", time.Since(start), "error", err)
 		}
 	}
 }

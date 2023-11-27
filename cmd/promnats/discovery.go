@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/kmpm/promnats.go"
 	"github.com/nats-io/nats.go"
-	"github.com/rs/zerolog/log"
 )
 
 // https://prometheus.io/docs/prometheus/latest/http_sd/
@@ -32,10 +32,10 @@ type discovered struct {
 func handleDiscoveryPaths(nc *nats.Conn, startport int, host string, refresh func(map[string]discovered) error) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// ask for data using a nats request
-		log.Debug().Msg("disovering metrics for paths")
+		slog.Debug("disovering metrics for paths")
 		var err error
 		defer func() {
-			log.Debug().Err(err).Msg("discovery paths done")
+			slog.Debug("discovery paths done", "error", err)
 		}()
 		var discoveries map[string]discovered
 		discoveries, err = discoverPaths(r.Context(), nc, host, startport)
@@ -73,13 +73,13 @@ func handleDiscoveryPaths(nc *nats.Conn, startport int, host string, refresh fun
 			_, err = w.Write(data)
 		}
 		if err != nil {
-			log.Error().Err(err).Msg("error writing discovery response")
+			slog.Error("error writing discovery response", "error", err)
 			return
 		}
 
 		err = refresh(discoveries)
 		if err != nil {
-			log.Error().Err(err).Msg("error refreshing")
+			slog.Error("error refreshing", "error", err)
 		}
 
 	}
@@ -102,7 +102,7 @@ func discoverPaths(ctx context.Context, nc *nats.Conn, host string, port int) (d
 		d := discovered{id: pnid, parts: parts, port: port}
 		path := strings.ToLower(strings.Join(parts, "/"))
 		discoveries[path] = d
-		log.Info().Str("pnid", pnid).Msg("something discovered")
+		slog.Info("something discovered", "pnid", pnid, "path", path)
 	}
 	return discoveries, nil
 }

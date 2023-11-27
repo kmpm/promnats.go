@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/rs/zerolog/log"
 )
 
 func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats.Conn, cb func(*nats.Msg)) error {
@@ -23,7 +23,7 @@ func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats
 			return err
 		}
 	}
-	log.Debug().Str("subj", subj).Msg("inbound")
+	slog.Debug("doReqAsync", "subject", subj, "request", string(jreq))
 
 	var (
 		mu  sync.Mutex
@@ -51,7 +51,7 @@ func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats
 		mu.Lock()
 		defer mu.Unlock()
 
-		log.Debug().Any("headers", m.Header).Msg("inbound")
+		slog.Debug("inbound", "subject", subj, "headers", m.Header)
 
 		if finisher != nil {
 			finisher.Reset(300 * time.Millisecond)
@@ -98,7 +98,7 @@ func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats
 	case <-ctx.Done():
 	}
 
-	log.Debug().Int("responses", ctr).Msg("receive complete")
+	slog.Debug("receive complete", "responses", ctr)
 
 	return nil
 }
