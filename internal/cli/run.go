@@ -72,13 +72,26 @@ func newConnectionFromOptions(opts *Options) (*nats.Conn, error) {
 
 	}
 
+	nopts := []nats.Option{
+		nats.Name(appname),
+		nats.ErrorHandler(func(_ *nats.Conn, sub *nats.Subscription, err error) {
+			slog.Error("error", "sub", sub.Subject, "error", err)
+		}),
+		nats.ReconnectHandler(func(_ *nats.Conn) {
+			slog.Info("reconnected")
+		}),
+		nats.ConnectHandler(func(nc *nats.Conn) {
+			slog.Info("connected", "servers", nc.Servers())
+		}),
+	}
+
 	if opts.Server == "" {
-		nc, err = natscontext.Connect(opts.Context, nats.Name(appname))
+		nc, err = natscontext.Connect(opts.Context, nopts...)
 		if err != nil {
 			return nil, fmt.Errorf("error connecting using nats context: %w", err)
 		}
 	} else {
-		nc, err = nats.Connect(opts.Server, nats.Name(appname))
+		nc, err = nats.Connect(opts.Server, nopts...)
 		if err != nil {
 			return nil, fmt.Errorf("error connecting to server: %w", err)
 		}
@@ -127,17 +140,17 @@ func Run(context.Context) {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		sig := <-sigs
-		fmt.Println()
-		fmt.Println(sig)
+		<-sigs
+		// fmt.Println()
+		// fmt.Println(sig)
 		done <- true
 	}()
 
 	// wait for things to close
-	slog.Info("running")
+	// slog.Info("running")
 	<-done
-	slog.Info("closing")
+	slog.Info("stopping")
 	app.stop()
-	slog.Info("closed")
+	slog.Info("stopped")
 
 }
