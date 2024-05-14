@@ -59,6 +59,7 @@ $(OUT_DIR):
 test:
 	go test ./...
 
+
 .PHONY: tidy
 tidy:
 	go mod tidy

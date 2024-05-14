@@ -1,17 +1,9 @@
 
-FROM golang:1.21-alpine as builder
-ARG GITHUB_USER=someuser
-ARG GITHUB_PASSWORD=somepassword
+FROM golang:1.21 as builder
 
-RUN apk --no-cache add make git gcc libtool musl-dev
+RUN useradd -u 10001 promnats
 
-RUN mkdir -p /app
-WORKDIR /app
-
-# configure for private repositories
-#ENV GOPRIVATE=
-#RUN echo "machine github.com login $GITHUB_USER password $GITHUB_PASSWORD" > $HOME/.netrc && \
-#    chmod 600 $HOME/.netrc
+WORKDIR /build/
  
 ARG APPNAME=promnats
 ARG VERSION=0.0.0-dev   
@@ -21,37 +13,30 @@ COPY go.mod go.sum ./
 # Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are not changed
 RUN go mod download
 
-COPY . /app
-RUN go build -ldflags "-s -w -X 'main.appVersion=${VERSION}'" -o /app/out/${APPNAME} ./cmd/promnats/
+COPY . /build/
+RUN go build -ldflags "-s -w -X 'main.appVersion=${VERSION}'" -o ${APPNAME} ./cmd/promnats/
 
 
 # running container
-FROM alpine:3.18
-LABEL org.opencontainers.image.base.name="alpine:3.18"
+FROM busybox AS package
+LABEL org.opencontainers.image.base.name="busybox"
 LABEL org.opencontainers.image.source https://github.com/kmpm/promnats.go
 
 ARG USER=default
 
-# install sudo as root
-RUN apk add ca-certificates su-exec tzdata
-
-# RUN adduser -D $USER
-# RUN adduser -D $USER \
-#         && echo "$USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$USER \
-#         && chmod 0440 /etc/sudoers.d/$USER
-
-RUN mkdir -p /app/data
-WORKDIR /app
+WORKDIR /
 
 ARG APPNAME=promnats
 ARG VERSION=0.0.0-dev
 
-COPY --from=builder /app/out/${APPNAME} /usr/local/bin/${APPNAME}
-COPY entrypoint.sh /usr/local/bin/
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /build/${APPNAME} .
+# COPY entrypoint.sh /usr/local/bin/
 
-RUN chmod +x /usr/local/bin/* 
+USER promnats 
+
 EXPOSE 8083
 
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["/promnats"]
 
-CMD ["promnats"]
