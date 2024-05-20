@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 
-	"github.com/kmpm/promnats.go/internal/cli"
+	"github.com/kmpm/promnats.go/internal/apps/discovery"
 )
 
 func main() {
 
-	cli.Run(context.Background())
+	discovery.Run(context.Background())
 
 }

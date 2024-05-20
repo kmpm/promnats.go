@@ -1,12 +1,12 @@
 # PromNATS - Prometheus reporting over NATS.
-If you have loads of services interconnected using NATS and use it's benefits 
-like automatic load balancing it can be annoying to use http for 
+If you have loads of services interconnected using NATS and use it's benefits
+like automatic load balancing it can be annoying to use http for
 instrumentation with, in this case, prometheus.
 
 This is a library that lets you use NATS requests instead of http requests
 to return the prometheus data.
 
-__Important:__ Any change below < 1.0.0 is to be considered a breaking change 
+__Important:__ Any change below < 1.0.0 is to be considered a breaking change
 since stuff id developing.
 
 ## Usage
@@ -19,9 +19,11 @@ func main() {
 ```
 
 ```shell
+# using default nats context
 nats req metrics ''
 
- nats --context nats_development req metrics ' '
+# using development server
+nats --context nats_development req metrics ' '
 19:28:21 Sending request on "metrics"
 19:28:21 Received with rtt 1.5296ms
 19:28:21 Promnats-ID: nats-demo-service.kmpm-ms-032d66.2264
@@ -52,7 +54,7 @@ go_memstats_alloc_bytes_total 416072
 
 ### How to interface data for prometheus
 
-cmd/promnats contains a program that lets you 
+cmd/promnats contains a program that lets you
 run a simple webserver that maps ports and subjects.
 
 ```shell

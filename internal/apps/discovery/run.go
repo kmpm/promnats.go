@@ -1,4 +1,4 @@
-package cli
+package discovery
 
 import (
 	"context"
@@ -129,7 +129,7 @@ func newAppFromOptions(opts *Options) *App {
 	return app
 }
 
-func Run(context.Context) {
+func Run(context.Context) error {
 	//TODO: configure the app
 	app := newAppFromFlags()
 	app.start()
@@ -152,5 +152,5 @@ func Run(context.Context) {
 	slog.Info("stopping")
 	app.stop()
 	slog.Info("stopped")
-
+	return nil
 }

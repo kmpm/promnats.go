@@ -2,15 +2,11 @@
 GOOS=$(shell go env GOOS)
 GOARCH=$(shell go env GOARCH)
 RUNARGS?=-verbosity debug
+RUNDIR?=${CURDIR}/cmd/promnats
 NAME=promnats
 CNREPO?=your.docker.repo
 CNNAME=$(CNREPO)/$(NAME)
 
-ifeq ($(GOOS),windows) 
-	BINEXT = .exe
-else
-	BINEXT =
-endif
 
 # try to be os agnostic
 ifeq ($(OS),Windows_NT)
@@ -36,10 +32,11 @@ MINOR=$(call word-dot,$(VERSION),2)
 REVISION=$(call word-dash,$(call word-dot,$(VERSION),3),1)
 PATCH=$(call word-dash,$(VERSION),2)
 
+CMDS=cmd/promnats cmd/promnatsdp
+
+
 # during build
-OUT_DIR=./out
-OUT_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)$(BINEXT))
-OUTVERBOSE_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)-$(VERSION)$(BINEXT))
+OUT_DIR=./out/$(GOOS)-$(GOARCH)
 GOFLAGS=-ldflags "-X 'main.appVersion=$(VERSION)'"
 
 help:
@@ -47,9 +44,11 @@ help:
 
 
 .PHONY: build
-build: $(OUT_DIR)
-	go build $(GOFLAGS) -o $(OUTVERBOSE_FILE) $(call FixPath,./cmd/promnats)
-	$(CP) $(OUTVERBOSE_FILE) $(OUT_FILE)
+build: $(CMDS)
+	@echo "Build complete in $(OUT_DIR)"
+
+$(CMDS): $(OUT_DIR)
+	cd $(OUT_DIR) ; go build $(GOFLAGS) $(call FixPath,$(CURDIR)/$@)
 
 
 $(OUT_DIR):
@@ -67,7 +66,7 @@ tidy:
 
 .PHONY: run
 run:
-	go run $(GOFLAGS) ./cmd/promnats $(RUNARGS)
+	go run $(GOFLAGS) $(RUNDIR) $(RUNARGS)
 	
 
 .PHONY: image
