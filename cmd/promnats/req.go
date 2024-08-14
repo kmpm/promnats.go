@@ -72,7 +72,11 @@ func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats
 	if err != nil {
 		return err
 	}
-	defer sub.Unsubscribe()
+	metSubGauge.Inc()
+	defer func() {
+		sub.Unsubscribe()
+		metSubGauge.Dec()
+	}()
 
 	if waitFor > 0 {
 		sub.AutoUnsubscribe(waitFor)
@@ -87,6 +91,7 @@ func doReqAsync(ctx context.Context, req any, subj string, waitFor int, nc *nats
 	if err != nil {
 		return err
 	}
+	metPubCounter.Inc()
 
 	select {
 	case err = <-errs:

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type application struct {
@@ -22,12 +23,14 @@ type application struct {
 	closing     bool
 	wg          sync.WaitGroup
 	nc          *nats.Conn
+	meterSelf   bool
 }
 
 func newApp() *application {
 	return &application{
 		servers:     make(map[int]*http.Server),
 		discoveries: map[string]discovered{},
+		meterSelf:   true,
 	}
 }
 
@@ -69,13 +72,17 @@ func (a *application) start(addr, host string, startport int) error {
 	}
 	mux := http.NewServeMux()
 	// mux.HandleFunc("/discover", handleDiscovery(a.nc, startport, host, a.refresh))
-	handleDiscovery := handleDiscoveryPaths(a.nc, startport, host, a.refreshPaths)
+	handleDiscovery := handleDiscoveryPaths(a.nc, startport, host, a.meterSelf, a.refreshPaths)
 	handlePath := a.makePathHandler()
+	if a.meterSelf {
+		mux.Handle("/promnats", promhttp.Handler())
+	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		var head string
 		head, r.URL.Path = shiftPath(r.URL.Path)
 		// log.Debug().Str("head", head).Str("path", r.URL.Path).Msg("shifted path")
+		metHTTPRequestCounter.Inc()
 		switch head {
 		case "metrics":
 			if len(a.discoveries) == 0 {

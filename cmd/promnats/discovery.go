@@ -29,7 +29,7 @@ type discovered struct {
 
 // handleDiscoryPaths create a http handler that returns a JSON for prometheus http service discovery
 // that uses custome metrics_path instead of /metrics on different ports
-func handleDiscoveryPaths(nc *nats.Conn, startport int, host string, refresh func(map[string]discovered) error) func(http.ResponseWriter, *http.Request) {
+func handleDiscoveryPaths(nc *nats.Conn, startport int, host string, meterSelf bool, refresh func(map[string]discovered) error) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// ask for data using a nats request
 		slog.Debug("disovering metrics for paths")
@@ -39,7 +39,21 @@ func handleDiscoveryPaths(nc *nats.Conn, startport int, host string, refresh fun
 		}()
 		var discoveries map[string]discovered
 		discoveries, err = discoverPaths(r.Context(), nc, startport)
+		if err != nil {
+			slog.Warn("error discovering paths", "error", err)
+		}
+		metDiscoveredPaths.Set(float64(len(discoveries)))
 		httpsd := []HTTPEntry{}
+		if meterSelf {
+			httpsd = append(httpsd, HTTPEntry{
+				Targets: []string{fmt.Sprintf("%s:%d", host, startport)},
+				Labels: map[string]string{
+					"__meta_prometheus_job": "promnats",
+					"__metrics_path__":      "promnats",
+				},
+			})
+		}
+
 		for path, dg := range discoveries {
 			grpn := dg.parts[0]
 			entry := HTTPEntry{

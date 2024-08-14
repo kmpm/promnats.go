@@ -31,6 +31,7 @@ func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request)
 		if !ok {
 			slog.Warn("not found", "path", r.URL.Path, "key", key, "discoveries", a.discoveries)
 			http.Error(w, "not found", http.StatusNotFound)
+			metPathFails.Inc()
 			return
 		}
 		subj := disc.id
@@ -40,6 +41,7 @@ func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			slog.Error("doReq error", "error", err, "subject", subj)
+			metPathFails.Inc()
 			return
 		}
 
@@ -47,9 +49,10 @@ func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request)
 		if len(msgs) < 1 {
 			http.Error(w, fmt.Sprintf("%s not found", subj), http.StatusNotFound)
 			slog.Warn("not found", "subject", subj)
+			metPathFails.Inc()
 			return
 		}
-
+		metPathRequests.WithLabelValues(subj).Inc()
 		// get the first message
 		msg := msgs[0]
 
