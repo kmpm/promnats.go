@@ -78,9 +78,9 @@ func (a *application) start(addr, host string, startport int) error {
 		// log.Debug().Str("head", head).Str("path", r.URL.Path).Msg("shifted path")
 		switch head {
 		case "metrics":
-			if a.discoveries == nil || len(a.discoveries) == 0 {
+			if len(a.discoveries) == 0 {
 				go func() {
-					paths, err := discoverPaths(context.Background(), a.nc, host, startport)
+					paths, err := discoverPaths(context.Background(), a.nc, startport)
 					if err != nil {
 						slog.Error("error discovering paths", "error", err)
 						return

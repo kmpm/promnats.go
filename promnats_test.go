@@ -49,7 +49,7 @@ func Test_genId(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := genId(tt.args.s); got != tt.want {
+			if got := genID(tt.args.s); got != tt.want {
 				t.Errorf("genId() = %v, want %v", got, tt.want)
 			}
 		})

@@ -16,7 +16,7 @@ import (
 // https://prometheus.io/docs/guides/file-sd/#use-file-based-service-discovery-to-discover-scrape-targets
 // https://stackoverflow.com/questions/44927130/different-prometheus-scrape-url-for-every-target
 
-type HttpEntry struct {
+type HTTPEntry struct {
 	Targets []string          `json:"targets"`
 	Labels  map[string]string `json:"labels"`
 }
@@ -38,11 +38,11 @@ func handleDiscoveryPaths(nc *nats.Conn, startport int, host string, refresh fun
 			slog.Debug("discovery paths done", "error", err)
 		}()
 		var discoveries map[string]discovered
-		discoveries, err = discoverPaths(r.Context(), nc, host, startport)
-		httpsd := []HttpEntry{}
+		discoveries, err = discoverPaths(r.Context(), nc, startport)
+		httpsd := []HTTPEntry{}
 		for path, dg := range discoveries {
 			grpn := dg.parts[0]
-			entry := HttpEntry{
+			entry := HTTPEntry{
 				Targets: []string{fmt.Sprintf("%s:%d", host, startport)},
 				Labels: map[string]string{
 					"__meta_prometheus_job": grpn,
@@ -85,7 +85,7 @@ func handleDiscoveryPaths(nc *nats.Conn, startport int, host string, refresh fun
 	}
 }
 
-func discoverPaths(ctx context.Context, nc *nats.Conn, host string, port int) (discoveries map[string]discovered, err error) {
+func discoverPaths(ctx context.Context, nc *nats.Conn, port int) (discoveries map[string]discovered, err error) {
 	var msgs []*nats.Msg
 	discoveries = make(map[string]discovered)
 	msgs, err = doReq(ctx, nil, "metrics", 0, nc)

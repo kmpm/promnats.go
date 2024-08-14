@@ -110,7 +110,7 @@ func defaultSubjects() []string {
 	}
 }
 
-func genId(s []string) string {
+func genID(s []string) string {
 	return strings.ToLower(s[len(s)-1])
 }
 
@@ -130,7 +130,7 @@ func RequestHandler(nc *nats.Conn, opts ...Option) error {
 	if len(cfg.Subjects) == 0 {
 		cfg.Subjects = defaultSubjects()
 	}
-	cfg.ID = genId(cfg.Subjects)
+	cfg.ID = genID(cfg.Subjects)
 	cfg.Header.Add(HeaderPnID, cfg.ID)
 
 	reg := prometheus.ToTransactionalGatherer(prometheus.DefaultGatherer)
