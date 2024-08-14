@@ -96,20 +96,14 @@ tags: no-dirty
 	docker tag $(NAME):latest $(CNNAME):$(MAJOR).$(MINOR).$(REVISION)-$(PATCH)
 
 .PHONY: push
-push: tidy audit no-dirty
+push: tidy audit no-dirty tags edge
 	docker push -a $(CNNAME) 
+
 
 .PHONY: edge
 edge: tidy image
 	docker tag $(NAME):latest $(CNNAME):edge
-	
-.PHONY: testserver
-testserver:
-	docker run -it --rm \
-		-p 9090:9090 \
-		-v "$(call FixPath,$(PWD)/contrib/prometheus):/etc/prometheus/contrib" \
-		prom/prometheus \
-		--config.file=/etc/prometheus/contrib/prometheus.yml
+
 
 .PHONY: no-dirty
 no-dirty:

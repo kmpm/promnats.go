@@ -42,4 +42,4 @@ scrape_configs:
     http_sd_configs:
     - follow_redirects: true
       refresh_interval: 1m
-      url: http://bfs-dt-pm.lcl.kapi.se:8083/discover
+      url: http://promnats:8083/discover

@@ -1,0 +1,28 @@
+services:
+
+  nats:
+    image: nats
+    command:
+      --jetstream
+  
+  promnats:
+    build: .
+    command:
+      - 'promnats'
+      - '--server=nats://nats:4222'
+      - '--host=promnats'
+    ports:
+      - 8083:8083
+    depends_on:    
+      - nats
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./contrib/:/contrib/
+    command:
+      --config.file=/contrib/prometheus/prometheus.yml
+    ports:
+      - 9090:9090
+    depends_on:
+      - promnats

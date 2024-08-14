@@ -4,3 +4,4 @@ contrib/
 .git/
 *-secret.*
 *.env
+docker-compose.yml
