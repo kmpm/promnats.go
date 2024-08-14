@@ -61,7 +61,17 @@ test:
 
 .PHONY: tidy
 tidy:
-	go mod tidy
+	go fmt ./...
+	go mod tidy -v
+
+.PHONY: audit
+audit:
+	@echo "running checks"
+	go mod verify
+	go vet ./...
+	go list -m all
+	go run honnef.co/go/tools/cmd/staticcheck@latest -checks=all,-ST1000,-U1000 ./...
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 
 .PHONY: run
@@ -70,7 +80,7 @@ run:
 	
 
 .PHONY: image
-image:
+image: tidy
 	docker build \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg APPNAME=$(NAME) \
@@ -78,7 +88,7 @@ image:
 		-f Dockerfile .
 		
 .PHONY: tags
-tags:
+tags: no-dirty
 	docker tag $(NAME):latest $(CNNAME):$(VERSION)
 	docker tag $(NAME):latest $(CNNAME):$(MAJOR)
 	docker tag $(NAME):latest $(CNNAME):$(MAJOR).$(MINOR)
@@ -86,7 +96,7 @@ tags:
 	docker tag $(NAME):latest $(CNNAME):$(MAJOR).$(MINOR).$(REVISION)-$(PATCH)
 
 .PHONY: push
-push:
+push: tidy audit no-dirty
 	docker push -a $(CNNAME) 
 
 .PHONY: edge
@@ -100,3 +110,7 @@ testserver:
 		-v "$(call FixPath,$(PWD)/contrib/prometheus):/etc/prometheus/contrib" \
 		prom/prometheus \
 		--config.file=/etc/prometheus/contrib/prometheus.yml
+
+.PHONY: no-dirty
+no-dirty:
+	git diff --exit-code
