@@ -1,0 +1,44 @@
+name: Makefile CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    
+    # switch to ubuntu-latest after 2025-01-17
+    runs-on: ubuntu-24.04
+    env:
+      CNREPO: '${{ vars.CNREPO }}'
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-tags: true
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.22'
+    
+    - name: Show make version
+      run: make --version
+
+    - name: Tidy and Audit
+      run: make info tidy audit
+
+    - name: Test
+      run: make test
+
+    - name: Build binary
+      run: make no-dirty build
+
+    - name: Build image
+      run: make no-dirty image
+
+    - name: List docker images
+      run: docker images
