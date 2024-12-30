@@ -1,16 +1,12 @@
 
-GOOS=$(shell go env GOOS)
-GOARCH=$(shell go env GOARCH)
 RUNARGS?=-verbosity debug
-NAME=promnats
 CNREPO?=your.docker.repo
-CNNAME=$(CNREPO)/$(NAME)
+NAME=promnats
+CNNAME:=${CNREPO}/${NAME}
+GOOS:=$(shell go env GOOS)
+GOARCH:=$(shell go env GOARCH)
+GOEXE:=$(shell go env GOEXE)
 
-ifeq ($(GOOS),windows) 
-	BINEXT = .exe
-else
-	BINEXT =
-endif
 
 # try to be os agnostic
 ifeq ($(OS),Windows_NT)
@@ -23,7 +19,6 @@ else
 	FixPath = $1
 	MKDIR = mkdir -p
 	RM = rm
-	BINEXT = 
 	CP = cp
 endif
 
@@ -38,12 +33,25 @@ PATCH=$(call word-dash,$(VERSION),2)
 
 # during build
 OUT_DIR=./out
-OUT_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)$(BINEXT))
-OUTVERBOSE_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)-$(VERSION)$(BINEXT))
+OUT_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)$(GOEXE))
+OUTVERBOSE_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)-$(VERSION)$(GOEXE))
 GOFLAGS=-ldflags "-X 'main.appVersion=$(VERSION)'"
 
-help:
-	@echo VERSION = $(VERSION)
+help: info
+	@echo "make build - build the promnats binary"
+	@echo "make test - run tests"
+	@echo "make tidy - run go fmt and go mod tidy"
+	@echo "make audit - run go mod verify, go vet, staticcheck, and go vuln check"
+
+info:
+	@echo "GOOS=$(GOOS)"
+	@echo "GOARCH=$(GOARCH)"
+	@echo "GOEXE=$(GOEXE)"
+	@echo "VERSION=$(VERSION)"
+	@echo "NAME=$(NAME)"
+	@echo "CNREPO=${CNREPO}"
+	@echo "CNNAME=${CNNAME}"
+	@echo tag "$(CNNAME):$(MAJOR).$(MINOR).$(REVISION)-$(PATCH)"
 
 
 .PHONY: build
@@ -80,11 +88,16 @@ run:
 	
 
 .PHONY: image
-image: tidy
+image:
 	docker build \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg APPNAME=$(NAME) \
 		-t $(NAME):latest \
+		-t "$(CNNAME):$(VERSION)" \
+		-t "$(CNNAME):$(MAJOR)" \
+		-t "$(CNNAME):$(MAJOR).$(MINOR)" \
+		-t "$(CNNAME):$(MAJOR).$(MINOR).$(REVISION)" \
+		-t "$(CNNAME):$(MAJOR).$(MINOR).$(REVISION)-$(PATCH)" \
 		-f Dockerfile .
 		
 .PHONY: tags
