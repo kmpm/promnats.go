@@ -12,76 +12,77 @@ import (
 	"os"
 	"time"
 
-	"github.com/kmpm/flagenvfile.go"
 	"github.com/nats-io/jsm.go/natscontext"
 	"github.com/nats-io/nats.go"
 )
 
 type options struct {
-	Context   string
-	Server    string
-	Nkey      string
-	Timeout   time.Duration
-	Verbosity string
-	Address   string
-	PrettyLog bool
-	Host      string
-	Version   bool
+	Version      bool
+	LogVerbosity string
+	LogPretty    bool
+	LogFormat    string
+
+	Context string
+	Server  string
+	Nkey    string
+	Timeout time.Duration
+	Address string
+	Host    string
 }
 
 var opts *options
 var appVersion = "0.0.0-dev"
 var programLevel = new(slog.LevelVar)
 
-func init() {
+func main() {
 	// initialize opts
 	opts = &options{}
 
+	// flags for logging
+	flag.StringVar(&opts.LogVerbosity, "verbosity", "info", "debug|info|warn|error")
+	flag.BoolVar(&opts.LogPretty, "pretty", false, "pretty logging")
+	flag.StringVar(&opts.LogFormat, "logformat", "text", "text|json")
+
 	// add some flags for connection
-	flag.String("context", "", "context")
-	flag.String("server", "", "server like "+nats.DefaultURL)
-	flag.String("nkey", "", "pathto nkey file")
+	flag.StringVar(&opts.Context, "context", "", "context")
+	flag.StringVar(&opts.Server, "server", "", "server like "+nats.DefaultURL)
+	flag.StringVar(&opts.Nkey, "nkey", "", "pathto nkey file")
 
 	// flags for other config
-	flag.String("verbosity", "info", "debug|info|warn|error")
-	flag.Duration("timeout", time.Second*2, "time waiting for replies")
-	flag.Bool("pretty", false, "pretty logging")
+	flag.DurationVar(&opts.Timeout, "timeout", time.Second*2, "time waiting for replies")
 
-	flag.String("address", ":8083", "address to listen on")
-	flag.Bool("version", false, "show version and eit")
-	flag.String("host", "", "host to use for http_sd. defaults to local IP if only 1")
-}
+	flag.StringVar(&opts.Address, "address", ":8083", "address to listen on")
+	flag.StringVar(&opts.Host, "host", "", "host to use for http_sd. defaults to local IP if only 1")
+	// flags not in opts
+	var showVersion bool
+	flag.BoolVar(&showVersion, "version", false, "show version and eit")
 
-func (o *options) fromFEF() error {
-	opts.Verbosity = flagenvfile.GetString("verbosity")
-	opts.PrettyLog = flagenvfile.GetBool("pretty")
-	opts.Version = flagenvfile.GetBool("version")
-	opts.Address = flagenvfile.GetString("address")
-	opts.Context = flagenvfile.GetString("context")
-	opts.Server = flagenvfile.GetString("server")
-	opts.Nkey = flagenvfile.GetString("nkey")
-	opts.Host = flagenvfile.GetString("host")
-	opts.Timeout = flagenvfile.GetDuration("timeout")
-	return nil
-}
-
-func main() {
 	flag.Parse()
-	flagenvfile.BindFlagset(flag.CommandLine)
-	flagenvfile.SetEnvPrefix("PN")
-	opts.fromFEF()
-	if opts.Version {
+
+	var err error
+	err = mergeWithEnv(flag.CommandLine, "PN")
+	check(err)
+
+	if showVersion {
 		fmt.Println(appVersion)
 		os.Exit(0)
 	}
 
 	// setup logging
-	ho := &slog.HandlerOptions{Level: programLevel, AddSource: opts.PrettyLog}
+	ho := &slog.HandlerOptions{Level: programLevel, AddSource: opts.LogPretty}
+	var h slog.Handler
+	switch opts.LogFormat {
+	case "json":
+		h = slog.NewJSONHandler(os.Stderr, ho)
+	case "text":
+		h = slog.NewTextHandler(os.Stderr, ho)
+	default:
+		panic("unknown log format: " + opts.LogFormat)
+	}
 
-	h := slog.NewTextHandler(os.Stderr, ho)
 	slog.SetDefault(slog.New(h))
 
-	switch opts.Verbosity {
+	switch opts.LogVerbosity {
 	case "debug":
 		programLevel.Set(slog.LevelDebug)
 	case "info":
@@ -97,24 +98,20 @@ func main() {
 	// if opts.PrettyLog {
 	// 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 	// }
-	var err error
+
 	var portS string
 	_, portS, err = net.SplitHostPort(opts.Address)
 	check(err)
 	port, err := strconv.Atoi(portS)
 	check(err)
 
-	slog.Info("starting", "version", appVersion)
-	slog.Debug("current options", "opts", opts)
+	slog.Info("starting promnats", "version", appVersion, "options", *opts)
+
 	if opts.Host == "" {
 		ips := GetLocalIP()
 		if len(ips) > 1 && opts.Host == "" {
 			slog.Error("error! more than 1 local ip found. please provide --host", "ips", ips)
 			os.Exit(1)
-			// log.Fatal().
-			// 	Err(fmt.Errorf("more than 1 local ip found. please provide --host")).
-			// 	Strs("ips", ips).
-			// 	Msg("error getting host")
 		}
 		opts.Host = ips[0]
 	}
