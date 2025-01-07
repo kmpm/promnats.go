@@ -176,6 +176,18 @@ func connect(appname string) (nc *nats.Conn, err error) {
 			return nil, err
 		}
 	}
+	nc.SetClosedHandler(func(_ *nats.Conn) {
+		slog.Warn("nats connection closed")
+	})
+	nc.SetDisconnectHandler(func(_ *nats.Conn) {
+		slog.Warn("nats disconnected")
+	})
+	nc.SetReconnectHandler(func(ncx *nats.Conn) {
+		slog.Warn("nats reconnected", "servers", ncx.Servers())
+	})
+	nc.SetErrorHandler(func(_ *nats.Conn, s *nats.Subscription, err error) {
+		slog.Error("nats error", "error", err, "subject", s.Subject)
+	})
 
 	return nc, nil
 }
