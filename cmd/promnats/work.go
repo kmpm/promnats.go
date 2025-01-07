@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 )
+
+const waitfor_limit = 1
 
 func (a *application) refreshPaths(discoveries map[string]discovered) error {
 	a.mu.Lock()
@@ -37,7 +40,9 @@ func (a *application) makePathHandler() func(http.ResponseWriter, *http.Request)
 		subj := disc.id
 		// send nats request with context from http.Request
 		// wait for first answer
-		msgs, err := doReq(r.Context(), nil, "metrics."+subj, 1, a.nc)
+		ctx, cancel := context.WithTimeout(r.Context(), opts.Timeout*5)
+		defer cancel()
+		msgs, err := doReq(ctx, nil, "metrics."+subj, waitfor_limit, a.nc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			slog.Error("doReq error", "error", err, "subject", subj)
