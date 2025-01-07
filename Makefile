@@ -127,12 +127,12 @@ release: clean-release release_$(GOOS)
 
 .PHONY: release_windows
 release_windows: build
-	cd $(OUT_DIR) & zip -j ../$(NAME)_windows_$(GOARCH).zip  *
+	cd $(OUT_DIR) ; zip -j ../$(NAME)_windows_$(GOARCH).zip  *
 
 
 .PHONY: release_linux
 release_linux: build
-	cd $(OUT_DIR) & tar -czf ../$(NAME)_linux_$(GOARCH).tar.gz *
+	cd $(OUT_DIR) ; tar -czf ../$(NAME)_linux_$(GOARCH).tar.gz *
 
 
 .PHONY: clean-release
