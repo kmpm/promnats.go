@@ -42,6 +42,7 @@ jobs:
         GOOS=linux GOARCH=amd64 make no-dirty release
         GOOS=linux GOARCH=arm64 make no-dirty release
         GOOS=windows GOARCH=amd64 make no-dirty release
+        ls -lah
     
     - name: Upload binaries to release
       if: ${{ (github.event_name != 'pull_request') && (startsWith(github.ref, 'refs/tags/v')) }}
