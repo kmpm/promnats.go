@@ -5,3 +5,6 @@ out/
 *-secret.*
 mapping.txt
 *.env
+
+*.zip
+*.tar.gz

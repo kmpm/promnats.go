@@ -11,14 +11,14 @@ GOEXE:=$(shell go env GOEXE)
 # try to be os agnostic
 ifeq ($(OS),Windows_NT)
 	FixPath = $(subst /,\,$1)
-	RM = del
+	RM = del /Q
 	MKDIR = mkdir
 	CP = copy
 	PWD = $(subst \,/,$(subst :,:,$(shell cd)))
 else
 	FixPath = $1
 	MKDIR = mkdir -p
-	RM = rm
+	RM = rm -Rf	
 	CP = cp
 endif
 
@@ -34,7 +34,6 @@ PATCH=$(call word-dash,$(VERSION),2)
 # during build
 OUT_DIR=./out
 OUT_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)$(GOEXE))
-OUTVERBOSE_FILE=$(call FixPath,$(OUT_DIR)/promnats-$(GOOS)-$(GOARCH)-$(VERSION)$(GOEXE))
 GOFLAGS=-ldflags "-X 'main.appVersion=$(VERSION)'"
 
 help: info
@@ -56,8 +55,7 @@ info:
 
 .PHONY: build
 build: $(OUT_DIR)
-	go build $(GOFLAGS) -o $(OUTVERBOSE_FILE) $(call FixPath,./cmd/promnats)
-	$(CP) $(OUTVERBOSE_FILE) $(OUT_FILE)
+	go build $(GOFLAGS) -o $(OUT_FILE) $(call FixPath,./cmd/promnats)
 
 
 $(OUT_DIR):
@@ -121,3 +119,22 @@ edge: tidy image
 .PHONY: no-dirty
 no-dirty:
 	git diff --exit-code
+
+
+.PHONY: release
+release: clean-release release_$(GOOS)
+
+
+.PHONY: release_windows
+release_windows: build
+	cd $(OUT_DIR) & zip -j ../$(NAME)_windows_$(GOARCH).zip  *
+
+
+.PHONY: release_linux
+release_linux: build
+	cd $(OUT_DIR) & tar -czf ../$(NAME)_linux_$(GOARCH).tar.gz *
+
+
+.PHONY: clean-release
+clean-release:
+	$(RM) $(call FixPath,$(OUT_DIR))
