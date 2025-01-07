@@ -44,9 +44,9 @@ func main() {
 	flag.StringVar(&opts.LogFormat, "logformat", "text", "text|json")
 
 	// add some flags for connection
-	flag.StringVar(&opts.Context, "context", "", "context")
-	flag.StringVar(&opts.Server, "server", "", "server like "+nats.DefaultURL)
-	flag.StringVar(&opts.Nkey, "nkey", "", "pathto nkey file")
+	flag.StringVar(&opts.Context, "context", "", "<context name> to use for connection")
+	flag.StringVar(&opts.Server, "server", nats.DefaultURL, "server like "+nats.DefaultURL)
+	flag.StringVar(&opts.Nkey, "nkey", "", "path to nkey file")
 
 	// flags for other config
 	flag.DurationVar(&opts.Timeout, "timeout", time.Second*2, "time waiting for replies")
@@ -118,24 +118,11 @@ func main() {
 	app := newApp()
 
 	appname := "promnats " + appVersion
-	// open connection by context or server
-	if opts.Server != "" && opts.Context != "" {
-		slog.Error("you must not use both context and server")
-		os.Exit(1)
-	}
 
-	if opts.Server == "" {
-		app.nc, err = natscontext.Connect(opts.Context, nats.Name(appname))
-		if err != nil {
-			slog.Error("error connecting using nats context", "error", err)
-			os.Exit(1)
-		}
-	} else {
-		app.nc, err = nats.Connect(opts.Server, nats.Name(appname))
-		if err != nil {
-			slog.Error("error connecting to server", "error", err)
-			os.Exit(1)
-		}
+	app.nc, err = connect(appname)
+	if err != nil {
+		slog.Error("error connecting to nats", "error", err)
+		os.Exit(1)
 	}
 
 	err = app.start(opts.Address, opts.Host, port)
@@ -162,4 +149,33 @@ func main() {
 	slog.Info("closing")
 	app.stop()
 	slog.Info("closed")
+}
+
+func connect(appname string) (nc *nats.Conn, err error) {
+	nopts := []nats.Option{
+		nats.Name(appname),
+	}
+
+	if opts.Context != "" {
+		nc, err = natscontext.Connect(opts.Context, nopts...)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if opts.Nkey != "" {
+			if o, err := nats.NkeyOptionFromSeed(opts.Nkey); err != nil {
+				slog.Error("error creating nkey option", "error", err)
+				os.Exit(1)
+			} else {
+				nopts = append(nopts, o)
+			}
+		}
+
+		nc, err = nats.Connect(opts.Server, nopts...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return nc, nil
 }
