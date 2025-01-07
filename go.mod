@@ -3,7 +3,6 @@ module github.com/kmpm/promnats.go
 go 1.21
 
 require (
-	github.com/kmpm/flagenvfile.go v0.0.0-20230507190947-2fb711425a25
 	github.com/nats-io/jsm.go v0.1.2
 	github.com/nats-io/nats.go v1.38.0
 	github.com/prometheus/client_golang v1.20.5
