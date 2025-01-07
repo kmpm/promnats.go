@@ -50,8 +50,8 @@ jobs:
           *.tar.gz
           *.zip
 
-    - name: Build image
-      run: make no-dirty image
+    # - name: Build image
+    #   run: make no-dirty image
 
-    - name: List docker images
-      run: docker images
+    # - name: List docker images
+    #   run: docker images
