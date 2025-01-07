@@ -10,9 +10,10 @@ on:
 
 jobs:
   build:
-    
     # switch to ubuntu-latest after 2025-01-17
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     env:
       CNREPO: '${{ vars.CNREPO }}'
 
