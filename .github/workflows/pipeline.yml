@@ -3,6 +3,8 @@ name: Makefile CI
 on:
   push:
     branches: [ "main" ]
+    # Publish semver tags as releases.
+    tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ "main" ]
 
@@ -35,7 +37,18 @@ jobs:
       run: make test
 
     - name: Build binary
-      run: make no-dirty build
+      run: |
+        GOOS=linux GOARCH=amd64 make no-dirty build
+        GOOS=linux GOARCH=arm64 make no-dirty build
+        GOOS=windows GOARCH=amd64 make no-dirty build
+    
+    - name: Upload binaries to release
+      if: ${{ (github.event_name != 'pull_request') && (startsWith(github.ref, 'refs/tags/v')) }}
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          *.tar.gz
+          *.zip
 
     - name: Build image
       run: make no-dirty image
